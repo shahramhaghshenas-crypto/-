@@ -1,0 +1,18 @@
+{
+  "short_name": "چیدمان رادیاتور",
+  "name": "محاسبه‌گر چیدمان و بارگیری رادیاتور",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "display": "standalone",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "fa"
+}

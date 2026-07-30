@@ -1,0 +1,6 @@
+{
+  "name": "سامانه بارگیری رادیاتور",
+  "description": "سامانه هوشمند و پیشرفته چیدمان، انتخاب خودرو، زمان‌بندی، محاسبه هزینه و گزارش بارگیری رادیاتور",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
