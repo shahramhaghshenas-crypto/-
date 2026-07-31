@@ -43,8 +43,8 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-3.5">
           <div className="relative w-14 h-14 rounded-2xl overflow-hidden border-2 border-indigo-500/40 shadow-md shadow-indigo-100 dark:shadow-none shrink-0 bg-slate-900 group">
             <img
-              src="/src/assets/images/radiator_loading_logo_1785347884310.jpg"
-              alt="لوگوی سامانه هوشمند بارگیری رادیاتور"
+              src="/icon-192.png"
+              alt="لوگوی سامانه هوشمند بارگیری رادیاتور (ThermoLink)"
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               onError={(e) => {

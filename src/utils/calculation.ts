@@ -1,4 +1,5 @@
 import { RadiatorCounts, CustomWeights, RadiatorData, VehiclePreset, EvaluationResult, PackedLayer, PackedLane, DestinationStop, PalletConfig, PackedPallet } from '../types';
+import { VEHICLE_PRESETS } from '../data/presets';
 
 export function pieceWeight(len: number, customWeights?: CustomWeights): number {
   if (customWeights && customWeights[len] !== undefined && customWeights[len] > 0) {
@@ -111,40 +112,43 @@ export function packOneLayer(
   return { ok: true, lanes, usedLength };
 }
 
-export function splitItemsIntoLayers(items: number[], layerCount: number, L?: number, lanesCount?: number): number[][] {
-  const layers: number[][] = Array.from({ length: layerCount }, () => []);
-  const sums: number[] = Array.from({ length: layerCount }, () => 0);
+export function splitItemsIntoLayers(
+  items: number[],
+  layerCount: number,
+  L?: number,
+  lanesCount?: number,
+  customWeights?: CustomWeights
+): number[][] {
+  const layers: number[][] = [];
+  for (let i = 0; i < layerCount; i++) {
+    layers.push([]);
+  }
 
-  // Sort items by length/weight descending to ensure heaviest items are considered first
+  // Sort items descending so larger radiators are placed first
   const sortedItems = [...items].sort((a, b) => b - a);
 
-  // For low Vertical Center of Gravity (CoG_Z), place heavier items on lower layers (Layer 0 = floor) first
   if (L && lanesCount) {
-    const maxCapacityPerLayer = L * lanesCount;
     for (const item of sortedItems) {
       let placed = false;
-      // Try to fill from lowest layer (layer 0) up to upper layers
-      for (let layerIdx = 0; layerIdx < layerCount; layerIdx++) {
-        if (sums[layerIdx] + item <= maxCapacityPerLayer * 0.95) {
-          layers[layerIdx].push(item);
-          sums[layerIdx] += item;
+
+      // Try placing item in existing layers (0 to layers.length - 1)
+      for (let layerIdx = 0; layerIdx < layers.length; layerIdx++) {
+        const candidate = [...layers[layerIdx], item];
+        const p = packOneLayer(candidate, L, lanesCount, customWeights);
+        if (p.ok) {
+          layers[layerIdx] = candidate;
           placed = true;
           break;
         }
       }
-      // Fallback: put in layer with minimum accumulated length
+
+      // If it doesn't fit in available layers, open an overflow layer
       if (!placed) {
-        let minIdx = 0;
-        for (let i = 1; i < layerCount; i++) {
-          if (sums[i] < sums[minIdx]) {
-            minIdx = i;
-          }
-        }
-        layers[minIdx].push(item);
-        sums[minIdx] += item;
+        layers.push([item]);
       }
     }
   } else {
+    const sums: number[] = Array.from({ length: layerCount }, () => 0);
     for (const item of sortedItems) {
       let minIdx = 0;
       for (let i = 1; i < layerCount; i++) {
@@ -168,7 +172,8 @@ export function evaluateTruck(
   layerH: number,
   axleLimit: number = 4500,
   overloadMargin: number = 0,
-  palletConfig?: PalletConfig
+  palletConfig?: PalletConfig,
+  manualLayers?: number
 ): EvaluationResult {
   // If Pallet mode is active, execute Pallet packing evaluation
   if (palletConfig && palletConfig.usePallets) {
@@ -216,7 +221,7 @@ export function evaluateTruck(
       effectivePalletW = pLen;
     }
 
-    const maxHeightLayers = Math.floor(maxH / pTotalH);
+    const maxHeightLayers = (manualLayers && manualLayers > 0) ? manualLayers : Math.floor(maxH / pTotalH);
 
     if (palletsPerFloor < 1 || maxHeightLayers < 1) {
       return {
@@ -401,9 +406,11 @@ export function evaluateTruck(
 
   // Standard Direct/Loose Radiator Packing
   const lanesCount = Math.floor(truck.W / rowW);
-  const maxLayers = Math.floor(maxH / layerH);
+  const activeMaxLayers = (manualLayers && manualLayers > 0)
+    ? manualLayers
+    : Math.max(1, Math.floor(maxH / layerH));
 
-  if (lanesCount < 1 || maxLayers < 1) {
+  if (lanesCount < 1 || activeMaxLayers < 1) {
     return {
       ok: false,
       reason: 'ابعاد مجاز (عرض یا ارتفاع) برای لایه‌بندی کافی نیست',
@@ -428,7 +435,7 @@ export function evaluateTruck(
       reason: `وزن کل بار (${Math.round(data.totalWeight)} کیلوگرم) از ظرفیت مجاز خودرو (${truck.cap} کیلوگرم) بیشتر است`,
       truck,
       lanesCount,
-      maxLayers,
+      maxLayers: activeMaxLayers,
       usedLayers: 0,
       packed: [],
       fill: 0,
@@ -441,19 +448,41 @@ export function evaluateTruck(
     };
   }
 
-  const layersItems = splitItemsIntoLayers(data.items, maxLayers, truck.L, lanesCount);
+  const layersItems = splitItemsIntoLayers(data.items, activeMaxLayers, truck.L, lanesCount, data.customWeights);
+  const usedLayers = layersItems.filter((x) => x.length > 0).length;
+
+  if (usedLayers > activeMaxLayers) {
+    return {
+      ok: false,
+      reason: `برای چیدمان بار در ${truck.name} به ${usedLayers} لایه نیاز است (بیشتر از حد مجاز ${activeMaxLayers} لایه تعیین‌شده)`,
+      truck,
+      lanesCount,
+      maxLayers: activeMaxLayers,
+      usedLayers,
+      packed: [],
+      fill: 0,
+      reserve: truck.cap - data.totalWeight,
+      approxAxle: data.totalWeight / 2,
+      axleOk: false,
+      axleBalanceScore: 0,
+      frontAxleWeight: 0,
+      rearAxleWeight: 0
+    };
+  }
+
   const packed: PackedLayer[] = [];
 
   for (const layerItems of layersItems) {
+    if (layerItems.length === 0) continue;
     const p = packOneLayer(layerItems, truck.L, lanesCount, data.customWeights);
     if (!p.ok) {
       return {
         ok: false,
-        reason: 'بار در طول/عرض ماشین و تعداد لایه‌های مجاز جا نشد',
+        reason: 'بار در طول/عرض ماشین جا نشد',
         truck,
         lanesCount,
-        maxLayers,
-        usedLayers: 0,
+        maxLayers: activeMaxLayers,
+        usedLayers,
         packed: [],
         fill: 0,
         reserve: truck.cap - data.totalWeight,
@@ -467,9 +496,9 @@ export function evaluateTruck(
     packed.push(p);
   }
 
-  const usedLayers = packed.filter((x) => x.lanes.some((r) => r.list.length > 0)).length;
+  const packedUsedLayers = packed.filter((x) => x.lanes.some((r) => r.list.length > 0)).length;
   const usedLen = packed.reduce((sum, layer) => sum + layer.usedLength, 0);
-  const totalAvailableLength = lanesCount * truck.L * Math.max(usedLayers, 1);
+  const totalAvailableLength = lanesCount * truck.L * Math.max(packedUsedLayers, 1);
   const fill = totalAvailableLength > 0 ? (usedLen / totalAvailableLength) * 100 : 0;
 
   // 3D Center of Gravity (CoG) calculation across all items
@@ -531,7 +560,7 @@ export function evaluateTruck(
     ok: true,
     truck,
     lanesCount,
-    maxLayers,
+    maxLayers: activeMaxLayers,
     usedLayers,
     packed,
     fill,
@@ -548,5 +577,136 @@ export function evaluateTruck(
     cogYPercent,
     cogStatus,
     cogStatusLabel
+  };
+}
+
+export interface VehicleRecommendationItem {
+  presetIndex: number;
+  preset: VehiclePreset;
+  result: EvaluationResult;
+  weightFillPercent: number;
+  volumeFillPercent: number;
+  isBest: boolean;
+  statusType: 'best' | 'feasible' | 'overload' | 'too_small';
+}
+
+export interface VehicleRecommendation {
+  bestResult: EvaluationResult | null;
+  bestPresetIndex: number;
+  activeLayersCount: number;
+  allEvaluations: VehicleRecommendationItem[];
+}
+
+export function getVehicleRecommendations(
+  data: RadiatorData,
+  maxH: number,
+  rowW: number,
+  layerH: number,
+  axleLimit: number = 4500,
+  overloadMargin: number = 0,
+  palletConfig?: PalletConfig,
+  manualLayers?: number
+): VehicleRecommendation {
+  const evaluations: VehicleRecommendationItem[] = VEHICLE_PRESETS.map((preset, index) => {
+    // Evaluate truck with user's manualLayers constraint if specified
+    let res = evaluateTruck(
+      preset,
+      data,
+      maxH,
+      rowW,
+      layerH,
+      axleLimit,
+      overloadMargin,
+      palletConfig,
+      manualLayers
+    );
+
+    // If it failed due to layer constraint but weight is OK, evaluate without layer limit to find required layers
+    if (!res.ok && manualLayers && manualLayers > 0 && data.totalWeight <= preset.cap + overloadMargin) {
+      const fallbackRes = evaluateTruck(
+        preset,
+        data,
+        maxH,
+        rowW,
+        layerH,
+        axleLimit,
+        overloadMargin,
+        palletConfig,
+        undefined
+      );
+      if (fallbackRes.ok) {
+        res = {
+          ...fallbackRes,
+          ok: false,
+          reason: `نیازمند ${fallbackRes.usedLayers} لایه چیدمان است (بیشتر از حد مجاز ${manualLayers} لایه)`
+        };
+      }
+    }
+
+    const weightFillPercent = Math.min(100, Math.round((data.totalWeight / preset.cap) * 100));
+    const volumeFillPercent = Math.round(res.fill || 0);
+
+    let statusType: 'best' | 'feasible' | 'overload' | 'too_small' = 'feasible';
+    if (!res.ok) {
+      if (data.totalWeight > preset.cap + overloadMargin) {
+        statusType = 'overload';
+      } else {
+        statusType = 'too_small';
+      }
+    }
+
+    return {
+      presetIndex: index,
+      preset,
+      result: res,
+      weightFillPercent,
+      volumeFillPercent,
+      isBest: false,
+      statusType
+    };
+  });
+
+  const feasible = evaluations.filter((e) => e.result.ok);
+
+  // Sort feasible vehicles:
+  // 1. Smallest weight capacity (cost efficiency - cheapest adequate transport)
+  // 2. Highest volume fill percentage
+  // 3. Fewer layers required
+  feasible.sort((a, b) => {
+    if (a.preset.cap !== b.preset.cap) {
+      return a.preset.cap - b.preset.cap;
+    }
+    if (b.result.fill !== a.result.fill) {
+      return b.result.fill - a.result.fill;
+    }
+    return a.result.usedLayers - b.result.usedLayers;
+  });
+
+  let bestResult: EvaluationResult | null = null;
+  let bestPresetIndex = -1;
+  let activeLayersCount = (manualLayers && manualLayers > 0) ? manualLayers : Math.max(1, Math.floor(maxH / layerH));
+
+  if (feasible.length > 0) {
+    bestResult = feasible[0].result;
+    bestPresetIndex = feasible[0].presetIndex;
+    if (manualLayers && manualLayers > 0) {
+      activeLayersCount = manualLayers;
+    } else {
+      activeLayersCount = bestResult.usedLayers || activeLayersCount;
+    }
+
+    evaluations.forEach((item) => {
+      if (item.presetIndex === bestPresetIndex) {
+        item.isBest = true;
+        item.statusType = 'best';
+      }
+    });
+  }
+
+  return {
+    bestResult,
+    bestPresetIndex,
+    activeLayersCount,
+    allEvaluations: evaluations
   };
 }

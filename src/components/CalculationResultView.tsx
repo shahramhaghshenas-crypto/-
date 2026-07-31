@@ -18,7 +18,7 @@ interface CalculationResultViewProps {
   signatureUrl: string | null;
 }
 
-export const CalculationResultView: React.FC<CalculationResultViewProps> = ({
+export const CalculationResultView: React.FC<CalculationResultViewProps> = React.memo(({
   result,
   data,
   truckDetails,
@@ -385,4 +385,7 @@ export const CalculationResultView: React.FC<CalculationResultViewProps> = ({
       </div>
     </div>
   );
-};
+});
+
+CalculationResultView.displayName = 'CalculationResultView';
+

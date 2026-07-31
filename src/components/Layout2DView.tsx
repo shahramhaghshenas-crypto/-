@@ -18,7 +18,7 @@ const SIZE_COLORS: Record<number, { bg: string; text: string; border: string }> 
   180: { bg: 'bg-slate-200 dark:bg-slate-800', text: 'text-slate-800 dark:text-slate-200', border: 'border-slate-400 dark:border-slate-600' }, // طوسی
 };
 
-export const Layout2DView: React.FC<Layout2DViewProps> = ({ result }) => {
+export const Layout2DView: React.FC<Layout2DViewProps> = React.memo(({ result }) => {
   const { packed, truck, maxLayers, lanesCount, frontAxleWeight, rearAxleWeight, axleBalanceScore } = result;
   const [selectedPiece, setSelectedPiece] = useState<{ len: number; weight: number; layer: number; row: number } | null>(null);
 
@@ -182,4 +182,7 @@ export const Layout2DView: React.FC<Layout2DViewProps> = ({ result }) => {
       </div>
     </div>
   );
-};
+});
+
+Layout2DView.displayName = 'Layout2DView';
+

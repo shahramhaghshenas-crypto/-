@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Package, Trash2, Zap, Weight, Ruler, Settings2, Plus, X } from 'lucide-react';
 import { RadiatorCounts, CustomWeights, FeatureAccess } from '../types';
 import { RADIATOR_SIZES } from '../data/presets';
@@ -27,28 +27,115 @@ export const QuantitiesCard: React.FC<QuantitiesCardProps> = ({
   const [newSize, setNewSize] = useState<string>('');
   const [newWeight, setNewWeight] = useState<string>('');
 
-  const data = buildRadiatorData(counts, undefined, customWeights);
+  // Local string inputs for instant 60 FPS input responsiveness
+  const [localInputs, setLocalInputs] = useState<Record<number, string>>(() => {
+    const init: Record<number, string> = {};
+    Object.entries(counts).forEach(([sz, val]) => {
+      const numVal = Number(val);
+      if (!isNaN(numVal) && numVal > 0) {
+        init[Number(sz)] = String(numVal);
+      }
+    });
+    return init;
+  });
 
-  // List of all active sizes (preset + any custom added sizes)
-  const activeSizes = Array.from(
-    new Set([
-      ...RADIATOR_SIZES,
-      ...Object.keys(counts).map(Number).filter((n) => !isNaN(n)),
-      ...Object.keys(customWeights).map(Number).filter((n) => !isNaN(n))
-    ])
-  ).sort((a, b) => a - b);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Synchronize local inputs whenever counts prop changes from outside (e.g. presets, sample, reset)
+  useEffect(() => {
+    setLocalInputs((prev) => {
+      const next: Record<number, string> = { ...prev };
+      const allSizes = Array.from(
+        new Set([
+          ...RADIATOR_SIZES,
+          ...Object.keys(counts).map(Number).filter((n) => !isNaN(n)),
+          ...Object.keys(customWeights).map(Number).filter((n) => !isNaN(n))
+        ])
+      );
+      allSizes.forEach((s) => {
+        const val = counts[s];
+        next[s] = val && val > 0 ? String(val) : '';
+      });
+      return next;
+    });
+  }, [counts, customWeights]);
+
+  // List of all active sizes
+  const activeSizes = useMemo(() => {
+    return Array.from(
+      new Set([
+        ...RADIATOR_SIZES,
+        ...Object.keys(counts).map(Number).filter((n) => !isNaN(n)),
+        ...Object.keys(customWeights).map(Number).filter((n) => !isNaN(n)),
+        ...Object.keys(localInputs).map(Number).filter((n) => !isNaN(n))
+      ])
+    ).sort((a, b) => a - b);
+  }, [counts, customWeights, localInputs]);
+
+  // Compute local counts from local string inputs for zero-latency local stats banner
+  const effectiveCounts = useMemo(() => {
+    const res: RadiatorCounts = {};
+    activeSizes.forEach((s) => {
+      const raw = localInputs[s];
+      if (raw !== undefined && raw !== '') {
+        const parsed = parseInt(raw, 10);
+        res[s] = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+      } else {
+        res[s] = 0;
+      }
+    });
+    return res;
+  }, [localInputs, activeSizes]);
+
+  const data = useMemo(() => {
+    return buildRadiatorData(effectiveCounts, undefined, customWeights);
+  }, [effectiveCounts, customWeights]);
+
+  // Propagate to parent state with a slight debounce (120ms) so typing isn't blocked by full 3D layout packing
+  const triggerParentChange = (updatedInputs: Record<number, string>) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      const newCounts: RadiatorCounts = {};
+      activeSizes.forEach((s) => {
+        const raw = updatedInputs[s];
+        if (raw !== undefined && raw !== '') {
+          const parsed = parseInt(raw, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            newCounts[s] = parsed;
+          }
+        }
+      });
+      onChange(newCounts);
+    }, 120);
+  };
+
+  const flushParentChange = (updatedInputs: Record<number, string>) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    const newCounts: RadiatorCounts = {};
+    activeSizes.forEach((s) => {
+      const raw = updatedInputs[s];
+      if (raw !== undefined && raw !== '') {
+        const parsed = parseInt(raw, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          newCounts[s] = parsed;
+        }
+      }
+    });
+    onChange(newCounts);
+  };
 
   const handleInputChange = (size: number, valStr: string) => {
-    if (valStr === '') {
-      onChange({ ...counts, [size]: 0 });
-      return;
-    }
-    const parsed = parseInt(valStr, 10);
-    const val = isNaN(parsed) ? 0 : Math.max(0, parsed);
-    onChange({
-      ...counts,
-      [size]: val
-    });
+    const nextInputs = { ...localInputs, [size]: valStr };
+    setLocalInputs(nextInputs);
+    triggerParentChange(nextInputs);
+  };
+
+  const handleInputBlur = () => {
+    flushParentChange(localInputs);
   };
 
   const handleWeightChange = (size: number, valStr: string) => {
@@ -61,13 +148,25 @@ export const QuantitiesCard: React.FC<QuantitiesCardProps> = ({
   };
 
   const handleClearAll = () => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     const emptyCounts: RadiatorCounts = {};
-    activeSizes.forEach((s) => { emptyCounts[s] = 0; });
+    const emptyInputs: Record<number, string> = {};
+    activeSizes.forEach((s) => {
+      emptyCounts[s] = 0;
+      emptyInputs[s] = '';
+    });
+    setLocalInputs(emptyInputs);
     onChange(emptyCounts);
   };
 
   const handleLoadSample = () => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     const sampleCounts: RadiatorCounts = { 60: 15, 80: 20, 100: 25, 120: 30, 140: 10, 160: 8, 180: 5 };
+    const sampleInputs: Record<number, string> = {};
+    Object.entries(sampleCounts).forEach(([s, v]) => {
+      sampleInputs[Number(s)] = String(v);
+    });
+    setLocalInputs(sampleInputs);
     onChange(sampleCounts);
   };
 
@@ -75,10 +174,10 @@ export const QuantitiesCard: React.FC<QuantitiesCardProps> = ({
     const s = parseInt(newSize);
     if (!s || s <= 0) return;
     const w = parseFloat(newWeight);
-    onChange({
-      ...counts,
-      [s]: counts[s] || 0
-    });
+    const updatedInputs = { ...localInputs, [s]: localInputs[s] || '' };
+    setLocalInputs(updatedInputs);
+    triggerParentChange(updatedInputs);
+
     if (w > 0 && onCustomWeightsChange) {
       onCustomWeightsChange({
         ...customWeights,
@@ -90,9 +189,11 @@ export const QuantitiesCard: React.FC<QuantitiesCardProps> = ({
   };
 
   const handleRemoveCustomSize = (size: number) => {
-    const newCounts = { ...counts };
-    delete newCounts[size];
-    onChange(newCounts);
+    const nextInputs = { ...localInputs };
+    delete nextInputs[size];
+    setLocalInputs(nextInputs);
+    flushParentChange(nextInputs);
+
     if (onCustomWeightsChange) {
       const newW = { ...customWeights };
       delete newW[size];
@@ -218,7 +319,8 @@ export const QuantitiesCard: React.FC<QuantitiesCardProps> = ({
       {/* Grid of Inputs for Each Radiator Size */}
       <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 mb-5">
         {activeSizes.map((size) => {
-          const count = counts[size] || 0;
+          const rawInput = localInputs[size] ?? '';
+          const count = effectiveCounts[size] || 0;
           const weightPerPiece = pieceWeight(size, customWeights);
           const totalSizeWeight = count * weightPerPiece;
           const isPreset = (RADIATOR_SIZES as readonly number[]).includes(size);
@@ -254,9 +356,10 @@ export const QuantitiesCard: React.FC<QuantitiesCardProps> = ({
                 type="number"
                 min="0"
                 onFocus={(e) => e.target.select()}
-                value={count === 0 ? '' : count}
+                value={rawInput}
                 placeholder="0"
                 onChange={(e) => handleInputChange(size, e.target.value)}
+                onBlur={handleInputBlur}
                 className="w-full text-center font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg py-1.5 text-base focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
               <div className="text-[10px] text-blue-700 dark:text-blue-300 font-medium text-center mt-1 min-h-[16px]">

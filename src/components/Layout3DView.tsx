@@ -37,7 +37,7 @@ const SIZE_HEX_COLORS: Record<number, number> = {
 
 const DEFAULT_HEX_COLOR = 0x06b6d4; // Cyan for custom sizes
 
-export const Layout3DView: React.FC<Layout3DViewProps> = ({ evalResult }) => {
+export const Layout3DView: React.FC<Layout3DViewProps> = React.memo(({ evalResult }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const modalMountRef = useRef<HTMLDivElement>(null);
 
@@ -878,4 +878,7 @@ export const Layout3DView: React.FC<Layout3DViewProps> = ({ evalResult }) => {
       </div>
     </div>
   );
-};
+});
+
+Layout3DView.displayName = 'Layout3DView';
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   RadiatorCounts,
   CustomWeights,
@@ -15,7 +15,8 @@ import {
   EvaluationResult,
   FeatureKey,
   SavedLoadingRecord,
-  PalletConfig
+  PalletConfig,
+  VehiclePreset
 } from './types';
 import {
   VEHICLE_PRESETS,
@@ -24,12 +25,13 @@ import {
   INITIAL_PLUGINS,
   DEFAULT_PALLET_CONFIG
 } from './data/presets';
-import { buildRadiatorData, evaluateTruck } from './utils/calculation';
+import { buildRadiatorData, evaluateTruck, getVehicleRecommendations } from './utils/calculation';
 import { clamp } from './utils/persianDigits';
 
 import { Header } from './components/Header';
 import { WizardCard } from './components/WizardCard';
 import { VehicleCard } from './components/VehicleCard';
+import { VehicleRecommendationCard } from './components/VehicleRecommendationCard';
 import { QuantitiesCard } from './components/QuantitiesCard';
 import { PalletConfigCard } from './components/PalletConfigCard';
 import { OrderPresetsImporter } from './components/OrderPresetsImporter';
@@ -100,6 +102,7 @@ export default function App() {
   // Layout Rules
   const [rules, setRules] = useState<LayoutRules>({
     maxH: 150,
+    manualLayers: 10,
     rowW: 60,
     layerH: 11,
     overloadMargin: 0,
@@ -160,7 +163,34 @@ export default function App() {
       return;
     }
 
-    const safeMaxH = clamp(rules.maxH, 11, 180);
+    const safeMaxH = clamp(rules.maxH, 11, 350);
+
+    if (rules.autoVehicle) {
+      const rec = getVehicleRecommendations(
+        data,
+        safeMaxH,
+        rules.rowW,
+        rules.layerH,
+        rules.axleLimit,
+        rules.overloadMargin,
+        palletConfig,
+        rules.manualLayers
+      );
+
+      if (rec.bestResult) {
+        setResult(rec.bestResult);
+        setSelectedTruckIndex(rec.bestPresetIndex);
+        setTruckDetails((prev) => ({
+          ...prev,
+          model: rec.bestResult!.truck.name,
+          L: rec.bestResult!.truck.L,
+          W: rec.bestResult!.truck.W,
+          cap: rec.bestResult!.truck.cap
+        }));
+        return;
+      }
+    }
+
     const manualTruck = {
       name: truckDetails.model || VEHICLE_PRESETS[selectedTruckIndex].name,
       L: truckDetails.L,
@@ -168,38 +198,33 @@ export default function App() {
       cap: truckDetails.cap
     };
 
-    const candidateList = rules.autoVehicle ? VEHICLE_PRESETS : [manualTruck];
-    const feasible: EvaluationResult[] = [];
-
-    candidateList.forEach((t) => {
-      const ev = evaluateTruck(t, data, safeMaxH, rules.rowW, rules.layerH, rules.axleLimit, rules.overloadMargin, palletConfig);
-      if (ev.ok) {
-        feasible.push(ev);
-      }
-    });
-
-    if (feasible.length > 0) {
-      feasible.sort((a, b) => a.truck.cap - b.truck.cap || a.usedLayers - b.usedLayers || b.fill - a.fill);
-      setResult(feasible[0]);
-    } else {
-      setResult({
-        ok: false,
-        reason: 'با تنظیمات فعلی، بار در هیچ‌یک از ماشین‌های موجود جا نشد یا از سقف وزن مجاز عبور کرد.',
-        truck: manualTruck,
-        lanesCount: Math.floor(manualTruck.W / rules.rowW),
-        maxLayers: Math.floor(safeMaxH / rules.layerH),
-        usedLayers: 0,
-        packed: [],
-        fill: 0,
-        reserve: manualTruck.cap - data.totalWeight,
-        approxAxle: data.totalWeight / 2,
-        axleOk: false,
-        axleBalanceScore: 0,
-        frontAxleWeight: 0,
-        rearAxleWeight: 0
-      });
-    }
+    const ev = evaluateTruck(manualTruck, data, safeMaxH, rules.rowW, rules.layerH, rules.axleLimit, rules.overloadMargin, palletConfig, rules.manualLayers);
+    setResult(ev);
   };
+
+  const handleSelectVehiclePreset = useCallback((index: number, preset: VehiclePreset) => {
+    setSelectedTruckIndex(index);
+    setTruckDetails((prev) => ({
+      ...prev,
+      model: preset.name,
+      L: preset.L,
+      W: preset.W,
+      cap: preset.cap
+    }));
+  }, []);
+
+  // Stable state updater callbacks to prevent unnecessary child re-renders
+  const handleCountsChange = useCallback((newCounts: RadiatorCounts) => {
+    setCounts(newCounts);
+  }, []);
+
+  const handlePalletConfigChange = useCallback((newConfig: PalletConfig) => {
+    setPalletConfig(newConfig);
+  }, []);
+
+  const handleCustomWeightsChange = useCallback((newWeights: CustomWeights) => {
+    setCustomWeights(newWeights);
+  }, []);
 
   // Load record from History
   const handleLoadRecordFromHistory = (rec: SavedLoadingRecord) => {
@@ -231,6 +256,7 @@ export default function App() {
     rules.maxH,
     rules.rowW,
     rules.layerH,
+    rules.manualLayers,
     rules.overloadMargin,
     rules.axleLimit,
     rules.allowOverhang,
@@ -341,36 +367,47 @@ export default function App() {
 
         {/* Mode Wizard or Pro Mode Content */}
         {mode === 'wizard' ? (
-          <WizardCard
-            counts={counts}
-            onCountsChange={setCounts}
-            destination={destinationInfo.destination}
-            onDestinationChange={(val) => setDestinationInfo({ ...destinationInfo, destination: val })}
-            driverName={truckDetails.driverName}
-            onDriverNameChange={(val) => setTruckDetails({ ...truckDetails, driverName: val })}
-            plate={truckDetails.plate}
-            onPlateChange={(val) => setTruckDetails({ ...truckDetails, plate: val })}
-            selectedTruckIndex={selectedTruckIndex}
-            onTruckSelect={setSelectedTruckIndex}
-            tL={truckDetails.L}
-            onTLChange={(val) => setTruckDetails({ ...truckDetails, L: val })}
-            tW={truckDetails.W}
-            onTWChange={(val) => setTruckDetails({ ...truckDetails, W: val })}
-            tCap={truckDetails.cap}
-            onTCapChange={(val) => setTruckDetails({ ...truckDetails, cap: val })}
-            maxH={rules.maxH}
-            onMaxHChange={(val) => setRules({ ...rules, maxH: val })}
-            rowW={rules.rowW}
-            onRowWChange={(val) => setRules({ ...rules, rowW: val })}
-            layerH={rules.layerH}
-            onLayerHChange={(val) => setRules({ ...rules, layerH: val })}
-            confirmLoading={rules.confirmLoading}
-            onConfirmLoadingChange={(val) => setRules({ ...rules, confirmLoading: val })}
-            onFinishWizard={() => {
-              setMode('pro');
-              handleRunCalculation();
-            }}
-          />
+          <div className="space-y-6">
+            <WizardCard
+              counts={counts}
+              onCountsChange={handleCountsChange}
+              customWeights={customWeights}
+              onCustomWeightsChange={handleCustomWeightsChange}
+              palletConfig={palletConfig}
+              onPalletConfigChange={handlePalletConfigChange}
+              truckDetails={truckDetails}
+              onTruckDetailsChange={setTruckDetails}
+              selectedTruckIndex={selectedTruckIndex}
+              onTruckSelect={setSelectedTruckIndex}
+              destinationInfo={destinationInfo}
+              onDestinationInfoChange={setDestinationInfo}
+              rules={rules}
+              onRulesChange={setRules}
+              shippingCostInfo={shippingCostInfo}
+              onShippingCostInfoChange={setShippingCostInfo}
+              photoUrl={photoUrl}
+              onPhotoChange={setPhotoUrl}
+              signatureUrl={signatureUrl}
+              onSignatureChange={setSignatureUrl}
+              getFeatureAccess={getFeatureAccess}
+              onFinishWizard={() => {
+                handleRunCalculation();
+              }}
+            />
+
+            <CalculationResultView
+              result={result}
+              data={currentData}
+              truckDetails={truckDetails}
+              destinationInfo={destinationInfo}
+              rules={rules}
+              shippingCost={shippingCostInfo.totalCost}
+              profileName={profileLabelMap[currentProfile]}
+              appModeName="Wizard"
+              photoUrl={photoUrl}
+              signatureUrl={signatureUrl}
+            />
+          </div>
         ) : (
           <div className="space-y-6">
             {/* Step 1: Cargo Quantities & Pallet Packaging */}
@@ -378,15 +415,15 @@ export default function App() {
 
             <QuantitiesCard
               counts={counts}
-              onChange={setCounts}
+              onChange={handleCountsChange}
               customWeights={customWeights}
-              onCustomWeightsChange={setCustomWeights}
+              onCustomWeightsChange={handleCustomWeightsChange}
               access={getFeatureAccess('loading_items')}
             />
 
             <PalletConfigCard
               config={palletConfig}
-              onChange={setPalletConfig}
+              onChange={handlePalletConfigChange}
               totalRadiators={currentData.totalPieces}
               access={getFeatureAccess('pallets')}
             />
@@ -422,6 +459,17 @@ export default function App() {
               onChange={setRules}
               onRunCalc={handleRunCalculation}
               access={getFeatureAccess('layout_rules')}
+            />
+
+            {/* Smart Vehicle Recommendation & Fill Matrix */}
+            <VehicleRecommendationCard
+              counts={counts}
+              customWeights={customWeights}
+              rules={rules}
+              palletConfig={palletConfig}
+              selectedTruckIndex={selectedTruckIndex}
+              onSelectVehiclePreset={handleSelectVehiclePreset}
+              access={getFeatureAccess('manual_vehicle')}
             />
 
             {/* Step 5: Complete Loading Calculation & 3D Visualizer */}

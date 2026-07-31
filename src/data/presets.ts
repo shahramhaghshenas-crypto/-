@@ -39,16 +39,16 @@ export const PALLET_MATERIAL_PRESETS: Record<'wooden' | 'metal' | 'plastic', { n
 };
 
 export const VEHICLE_PRESETS: VehiclePreset[] = [
-  { name: 'خاور ۶ تن', L: 470, W: 220, cap: 6000 },
-  { name: 'خاور ۸ تن', L: 470, W: 220, cap: 8000 },
-  { name: '۹۱۱ پنج تن', L: 580, W: 220, cap: 5000 },
-  { name: 'تک ۱۰ تن', L: 680, W: 230, cap: 10000 },
-  { name: 'ده چرخ', L: 760, W: 245, cap: 15000 },
-  { name: 'نیسان', L: 300, W: 170, cap: 2200 },
-  { name: 'وانت', L: 220, W: 150, cap: 700 },
-  { name: 'مزدا', L: 280, W: 160, cap: 1000 },
-  { name: 'تریلی ۲۲ تن', L: 1200, W: 250, cap: 22000 },
-  { name: 'سفارشی', L: 470, W: 220, cap: 6000 }
+  { name: 'خاور ۶ تن', L: 470, W: 220, cap: 3000, radiatorMeterRange: '۶۰ تا ۱۰۰ متر', nominalTonnage: '۳ تن', minMeters: 60, maxMeters: 100 },
+  { name: 'خاور ۸ تن', L: 500, W: 210, cap: 4000, radiatorMeterRange: '۱۰۰ تا ۱۳۵ متر', nominalTonnage: '۴ تن', minMeters: 100, maxMeters: 135 },
+  { name: '۹۱۱ پنج تن', L: 470, W: 200, cap: 5000, radiatorMeterRange: '۱۳۵ تا ۱۶۵ متر', nominalTonnage: '۵ تن', minMeters: 135, maxMeters: 165 },
+  { name: 'تک ۱۰ تن', L: 580, W: 220, cap: 10000, radiatorMeterRange: '۱۶۵ تا ۲۲۰ متر', nominalTonnage: '۱۰ تن', minMeters: 165, maxMeters: 220 },
+  { name: 'ده چرخ', L: 680, W: 230, cap: 15000, radiatorMeterRange: '۲۲۰ تا ۲۶۰ متر', nominalTonnage: '۱۵ تن', minMeters: 220, maxMeters: 260 },
+  { name: 'تریلی', L: 1200, W: 250, cap: 22000, radiatorMeterRange: '۲۶۰ تا ۵۲۰ متر', nominalTonnage: '۲۲ تن', minMeters: 260, maxMeters: 520 },
+  { name: 'نیسان', L: 200, W: 200, cap: 2000, radiatorMeterRange: '۲۵ تا ۶۰ متر', nominalTonnage: '۲ تن', minMeters: 25, maxMeters: 60 },
+  { name: 'وانت', L: 200, W: 150, cap: 500, radiatorMeterRange: '۱ تا ۱۵ متر', nominalTonnage: '۵۰۰ کیلوگرم', minMeters: 1, maxMeters: 15 },
+  { name: 'مزدا', L: 200, W: 150, cap: 1000, radiatorMeterRange: '۱۵ تا ۲۵ متر', nominalTonnage: '۱ تن', minMeters: 15, maxMeters: 25 },
+  { name: 'سفارشی', L: 470, W: 220, cap: 6000, radiatorMeterRange: 'دلخواه', nominalTonnage: 'سفارشی' }
 ];
 
 export const PROFILE_FEATURES: Record<UserProfileKey, FeatureKey[]> = {

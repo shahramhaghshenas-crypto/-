@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Package, Layers, DollarSign, Scale, Ruler, Info, CheckCircle2, Box } from 'lucide-react';
 import { PalletConfig, PalletMaterial, FeatureAccess } from '../types';
 import { PALLET_MATERIAL_PRESETS } from '../data/presets';
@@ -11,7 +11,7 @@ interface PalletConfigCardProps {
   access?: FeatureAccess;
 }
 
-export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
+export const PalletConfigCard: React.FC<PalletConfigCardProps> = React.memo(({
   config,
   onChange,
   totalRadiators,
@@ -19,6 +19,84 @@ export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
 }) => {
   if (access === 'disabled') return null;
   const isReadOnly = access === 'view';
+
+  // Local string inputs for fluid, lock-free editing
+  const [localInputs, setLocalInputs] = useState({
+    length: String(config.length ?? 120),
+    width: String(config.width ?? 80),
+    height: String(config.height ?? 15),
+    tareWeight: String(config.tareWeight ?? 25),
+    unitPrice: String(config.unitPrice ?? 450000),
+    radiatorsPerPallet: String(config.radiatorsPerPallet ?? 20),
+    customPalletCount: config.customPalletCount > 0 ? String(config.customPalletCount) : ''
+  });
+
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Keep local inputs synchronized when external config changes (e.g. material preset selected)
+  useEffect(() => {
+    setLocalInputs({
+      length: String(config.length ?? 120),
+      width: String(config.width ?? 80),
+      height: String(config.height ?? 15),
+      tareWeight: String(config.tareWeight ?? 25),
+      unitPrice: String(config.unitPrice ?? 450000),
+      radiatorsPerPallet: String(config.radiatorsPerPallet ?? 20),
+      customPalletCount: config.customPalletCount > 0 ? String(config.customPalletCount) : ''
+    });
+  }, [
+    config.material,
+    config.length,
+    config.width,
+    config.height,
+    config.tareWeight,
+    config.unitPrice,
+    config.radiatorsPerPallet,
+    config.customPalletCount
+  ]);
+
+  const propagateChange = (newInputs: typeof localInputs, immediate = false) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    const apply = () => {
+      const len = parseInt(newInputs.length, 10);
+      const w = parseInt(newInputs.width, 10);
+      const h = parseInt(newInputs.height, 10);
+      const tare = parseFloat(newInputs.tareWeight);
+      const price = parseFloat(newInputs.unitPrice);
+      const rads = parseInt(newInputs.radiatorsPerPallet, 10);
+      const customCnt = parseInt(newInputs.customPalletCount, 10);
+
+      onChange({
+        ...config,
+        length: !isNaN(len) && len > 0 ? len : config.length,
+        width: !isNaN(w) && w > 0 ? w : config.width,
+        height: !isNaN(h) && h > 0 ? h : config.height,
+        tareWeight: !isNaN(tare) && tare >= 0 ? tare : config.tareWeight,
+        unitPrice: !isNaN(price) && price >= 0 ? price : config.unitPrice,
+        radiatorsPerPallet: !isNaN(rads) && rads > 0 ? rads : config.radiatorsPerPallet,
+        customPalletCount: !isNaN(customCnt) && customCnt >= 0 ? customCnt : 0
+      });
+    };
+
+    if (immediate) {
+      apply();
+    } else {
+      debounceTimerRef.current = setTimeout(apply, 150);
+    }
+  };
+
+  const handleFieldChange = (field: keyof typeof localInputs, valStr: string) => {
+    const next = { ...localInputs, [field]: valStr };
+    setLocalInputs(next);
+    propagateChange(next, false);
+  };
+
+  const handleFieldBlur = () => {
+    propagateChange(localInputs, true);
+  };
 
   const handleMaterialChange = (mat: PalletMaterial) => {
     const preset = PALLET_MATERIAL_PRESETS[mat];
@@ -122,8 +200,10 @@ export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
               <input
                 type="number"
                 disabled={isReadOnly}
-                value={config.length}
-                onChange={(e) => onChange({ ...config, length: Math.max(10, Number(e.target.value)) })}
+                value={localInputs.length}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => handleFieldChange('length', e.target.value)}
+                onBlur={handleFieldBlur}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -137,8 +217,10 @@ export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
               <input
                 type="number"
                 disabled={isReadOnly}
-                value={config.width}
-                onChange={(e) => onChange({ ...config, width: Math.max(10, Number(e.target.value)) })}
+                value={localInputs.width}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => handleFieldChange('width', e.target.value)}
+                onBlur={handleFieldBlur}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -152,8 +234,10 @@ export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
               <input
                 type="number"
                 disabled={isReadOnly}
-                value={config.height}
-                onChange={(e) => onChange({ ...config, height: Math.max(5, Number(e.target.value)) })}
+                value={localInputs.height}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => handleFieldChange('height', e.target.value)}
+                onBlur={handleFieldBlur}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -167,8 +251,10 @@ export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
               <input
                 type="number"
                 disabled={isReadOnly}
-                value={config.tareWeight}
-                onChange={(e) => onChange({ ...config, tareWeight: Math.max(0, Number(e.target.value)) })}
+                value={localInputs.tareWeight}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => handleFieldChange('tareWeight', e.target.value)}
+                onBlur={handleFieldBlur}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -185,8 +271,10 @@ export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
               <input
                 type="number"
                 disabled={isReadOnly}
-                value={config.unitPrice}
-                onChange={(e) => onChange({ ...config, unitPrice: Math.max(0, Number(e.target.value)) })}
+                value={localInputs.unitPrice}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => handleFieldChange('unitPrice', e.target.value)}
+                onBlur={handleFieldBlur}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 text-emerald-700 dark:text-emerald-400"
               />
             </div>
@@ -200,8 +288,10 @@ export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
               <input
                 type="number"
                 disabled={isReadOnly}
-                value={config.radiatorsPerPallet}
-                onChange={(e) => onChange({ ...config, radiatorsPerPallet: Math.max(1, Number(e.target.value)) })}
+                value={localInputs.radiatorsPerPallet}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => handleFieldChange('radiatorsPerPallet', e.target.value)}
+                onBlur={handleFieldBlur}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -215,8 +305,10 @@ export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
               <input
                 type="number"
                 disabled={isReadOnly}
-                value={config.customPalletCount}
-                onChange={(e) => onChange({ ...config, customPalletCount: Math.max(0, Number(e.target.value)) })}
+                value={localInputs.customPalletCount}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => handleFieldChange('customPalletCount', e.target.value)}
+                onBlur={handleFieldBlur}
                 placeholder="خودکار"
                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
@@ -248,4 +340,7 @@ export const PalletConfigCard: React.FC<PalletConfigCardProps> = ({
       )}
     </div>
   );
-};
+});
+
+PalletConfigCard.displayName = 'PalletConfigCard';
+

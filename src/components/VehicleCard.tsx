@@ -2,6 +2,9 @@ import React from 'react';
 import { Truck, AlertCircle, Sparkles } from 'lucide-react';
 import { TruckDetails, FeatureAccess } from '../types';
 import { VEHICLE_PRESETS } from '../data/presets';
+import { VehicleRecommendation } from '../utils/calculation';
+import { VehicleRecommendationPanel } from './VehicleRecommendationPanel';
+import { toPersianDigits } from '../utils/persianDigits';
 
 interface VehicleCardProps {
   details: TruckDetails;
@@ -11,6 +14,7 @@ interface VehicleCardProps {
   access?: FeatureAccess;
   onManualCustomized?: () => void;
   autoVehicleActive?: boolean;
+  recommendation?: VehicleRecommendation;
 }
 
 export const VehicleCard: React.FC<VehicleCardProps> = ({
@@ -20,7 +24,8 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
   onSelectPreset,
   access = 'active',
   onManualCustomized,
-  autoVehicleActive = false
+  autoVehicleActive = false,
+  recommendation
 }) => {
   if (access === 'disabled') return null;
   const isReadOnly = access === 'view';
@@ -71,10 +76,19 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
         )}
       </div>
 
+      {/* Recommendation Panel */}
+      {recommendation && (
+        <VehicleRecommendationPanel
+          recommendation={recommendation}
+          onSelectPreset={handlePresetSelect}
+          selectedPresetIndex={selectedIndex}
+        />
+      )}
+
       {/* Preset vehicle selector pills */}
       <div className="mb-5">
         <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
-          انتخاب سریع الگوی خودرو:
+          انتخاب سریع الگوی خودرو (بر اساس ابعاد، تناژ مجاز و متراژ رادیاتور):
         </label>
         <div className="flex flex-wrap gap-2">
           {VEHICLE_PRESETS.map((p, idx) => {
@@ -84,13 +98,23 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
                 key={p.name}
                 type="button"
                 onClick={() => handlePresetSelect(idx)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex flex-col items-start gap-1 text-right ${
                   active
                     ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-200 dark:shadow-none'
                     : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                {p.name}
+                <div className="flex items-center justify-between w-full gap-2">
+                  <span>{p.name}</span>
+                  {p.nominalTonnage && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${active ? 'bg-blue-700 text-blue-100' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                      {p.nominalTonnage}
+                    </span>
+                  )}
+                </div>
+                <div className={`text-[10px] font-medium ${active ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                  {toPersianDigits(p.L)}×{toPersianDigits(p.W)} cm {p.radiatorMeterRange ? ` | ${p.radiatorMeterRange}` : ''}
+                </div>
               </button>
             );
           })}

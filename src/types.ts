@@ -23,6 +23,10 @@ export interface VehiclePreset {
   L: number; // Length in cm
   W: number; // Width in cm
   cap: number; // Weight capacity in kg
+  radiatorMeterRange?: string; // e.g. "۶۰ تا ۱۰۰ متر"
+  nominalTonnage?: string; // e.g. "۳ تن" or "۵۰۰ کیلوگرم"
+  minMeters?: number;
+  maxMeters?: number;
 }
 
 export interface TruckDetails {
@@ -59,6 +63,8 @@ export interface LayoutRules {
   maxH: number; // Max height cm (11 to 180)
   rowW: number; // Row width cm
   layerH: number; // Layer height cm
+  manualLayers?: number; // Optional manual layer count specified by user (e.g., 1-15 layers)
+  customLayersCount?: number; // Manual override of layer count (0 = auto based on maxH, or 1..15)
   overloadMargin: number; // Overload margin in kg
   axleLimit: number; // Axle limit in kg
   confirmLoading: boolean;

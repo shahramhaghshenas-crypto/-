@@ -19,9 +19,24 @@ export const LayoutRulesCard: React.FC<LayoutRulesCardProps> = ({
   if (access === 'disabled') return null;
   const isReadOnly = access === 'view';
 
+  const currentLayers = rules.manualLayers && rules.manualLayers > 0
+    ? rules.manualLayers
+    : Math.max(1, Math.floor(rules.maxH / rules.layerH));
+
   const handleMaxHChange = (val: number) => {
-    const safeH = clamp(val, 11, 180);
-    onChange({ ...rules, maxH: safeH });
+    const safeH = clamp(val, 11, 350);
+    const newLayers = Math.max(1, Math.floor(safeH / rules.layerH));
+    onChange({ ...rules, maxH: safeH, manualLayers: newLayers });
+  };
+
+  const handleLayerCountChange = (layerCount: number) => {
+    const safeLayers = Math.max(1, Math.min(25, layerCount));
+    const calculatedH = clamp(safeLayers * rules.layerH, 11, 350);
+    onChange({
+      ...rules,
+      manualLayers: safeLayers,
+      maxH: calculatedH
+    });
   };
 
   return (
@@ -29,11 +44,89 @@ export const LayoutRulesCard: React.FC<LayoutRulesCardProps> = ({
       <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
         <h2 className="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2">
           <Sliders className="w-5 h-5 text-blue-600" />
-          تنظیمات چیدمان و استانداردهای کنترل بار
+          تنظیمات لایه‌ها و استانداردهای چیدمان
         </h2>
         <span className="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-bold border border-blue-200">
-          محدوده ارتفاع: ۱۱ تا ۱۸۰ cm
+          ارتفاع هر لایه: {toPersianDigits(rules.layerH)} cm
         </span>
+      </div>
+
+      {/* DEDICATED MANUAL LAYER SELECTION SECTION */}
+      <div className="bg-gradient-to-r from-blue-50/80 via-slate-50 to-indigo-50/80 border border-blue-200/80 rounded-2xl p-4 md:p-5 mb-5 shadow-inner">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 bg-blue-600 text-white rounded-xl shadow-sm">
+              <Layers className="w-4 h-4" />
+            </span>
+            <div>
+              <h3 className="text-sm font-black text-slate-800">
+                تعیین دستی تعداد لایه‌های چیدمان
+              </h3>
+              <p className="text-xs text-slate-500">
+                تعداد لایه‌های عمودی بارگیری را مشخص کنید تا بهترین خودرو پیشنهاد داده شود
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-blue-200 shadow-sm shrink-0">
+            <span className="text-xs text-slate-500 font-medium">ارتفاع کل بار:</span>
+            <span className="text-sm font-black text-blue-700">
+              {toPersianDigits(currentLayers * rules.layerH)} cm
+            </span>
+          </div>
+        </div>
+
+        {/* Quick Layer Buttons + Stepper */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center border border-slate-300 bg-white rounded-xl p-1 shadow-sm shrink-0">
+            <button
+              type="button"
+              onClick={() => handleLayerCountChange(currentLayers - 1)}
+              disabled={currentLayers <= 1}
+              className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-base disabled:opacity-40 transition flex items-center justify-center"
+            >
+              -
+            </button>
+            <div className="px-3 flex items-center gap-1">
+              <input
+                type="number"
+                min="1"
+                max="25"
+                value={currentLayers}
+                onChange={(e) => handleLayerCountChange(parseInt(e.target.value) || 1)}
+                className="w-12 text-center text-sm font-black text-slate-900 bg-transparent focus:outline-none"
+              />
+              <span className="text-xs font-bold text-slate-600">لایه</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleLayerCountChange(currentLayers + 1)}
+              className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-black text-base transition flex items-center justify-center shadow-sm"
+            >
+              +
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 18, 20].map((lCount) => {
+              const active = currentLayers === lCount;
+              return (
+                <button
+                  key={lCount}
+                  type="button"
+                  onClick={() => handleLayerCountChange(lCount)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                    active
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-200 border border-blue-600'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {toPersianDigits(lCount)} لایه
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Grid of numeric rule inputs */}
@@ -46,7 +139,7 @@ export const LayoutRulesCard: React.FC<LayoutRulesCardProps> = ({
           <input
             type="number"
             min="11"
-            max="180"
+            max="350"
             onFocus={(e) => e.target.select()}
             value={rules.maxH}
             onChange={(e) => handleMaxHChange(parseInt(e.target.value) || 150)}
@@ -55,7 +148,7 @@ export const LayoutRulesCard: React.FC<LayoutRulesCardProps> = ({
           <input
             type="range"
             min="11"
-            max="180"
+            max="350"
             value={rules.maxH}
             onChange={(e) => handleMaxHChange(parseInt(e.target.value) || 150)}
             className="w-full mt-2 accent-blue-600 cursor-pointer"
