@@ -425,7 +425,9 @@ export default function App() {
               config={palletConfig}
               onChange={handlePalletConfigChange}
               totalRadiators={currentData.totalPieces}
+              radiatorCounts={counts}
               access={getFeatureAccess('pallets')}
+              onSyncCounts={(newCounts) => setCounts(newCounts)}
             />
 
             {/* Step 2: Vehicle Selection & Truck Capacity */}

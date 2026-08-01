@@ -1,5 +1,5 @@
-import { RadiatorCounts, CustomWeights, RadiatorData, VehiclePreset, EvaluationResult, PackedLayer, PackedLane, DestinationStop, PalletConfig, PackedPallet } from '../types';
-import { VEHICLE_PRESETS } from '../data/presets';
+import { RadiatorCounts, CustomWeights, RadiatorData, VehiclePreset, EvaluationResult, PackedLayer, PackedLane, DestinationStop, PalletConfig, PackedPallet, SizePalletSpec } from '../types';
+import { VEHICLE_PRESETS, DEFAULT_PER_SIZE_PALLET_SPECS } from '../data/presets';
 
 export function pieceWeight(len: number, customWeights?: CustomWeights): number {
   if (customWeights && customWeights[len] !== undefined && customWeights[len] > 0) {
@@ -131,15 +131,25 @@ export function splitItemsIntoLayers(
     for (const item of sortedItems) {
       let placed = false;
 
-      // Try placing item in existing layers (0 to layers.length - 1)
+      // Evenly balance items across available layerCount layers when possible
+      let bestLayerIdx = -1;
+      let minLayerLength = Infinity;
+
       for (let layerIdx = 0; layerIdx < layers.length; layerIdx++) {
         const candidate = [...layers[layerIdx], item];
         const p = packOneLayer(candidate, L, lanesCount, customWeights);
         if (p.ok) {
-          layers[layerIdx] = candidate;
-          placed = true;
-          break;
+          const currentLen = layers[layerIdx].reduce((a, b) => a + b, 0);
+          if (currentLen < minLayerLength) {
+            minLayerLength = currentLen;
+            bestLayerIdx = layerIdx;
+          }
         }
+      }
+
+      if (bestLayerIdx !== -1) {
+        layers[bestLayerIdx].push(item);
+        placed = true;
       }
 
       // If it doesn't fit in available layers, open an overflow layer
@@ -177,6 +187,420 @@ export function evaluateTruck(
 ): EvaluationResult {
   // If Pallet mode is active, execute Pallet packing evaluation
   if (palletConfig && palletConfig.usePallets) {
+    // Custom Basket Mode (Multi-pallet basket with custom dimensions & sizes per pallet)
+    if (
+      palletConfig.sizeDistributionMode === 'basket' &&
+      palletConfig.customPalletBasket &&
+      palletConfig.customPalletBasket.length > 0
+    ) {
+      const basket = palletConfig.customPalletBasket;
+      const totalPalletsNeeded = basket.length;
+      let totalPalletTareWeight = 0;
+      let totalPalletCost = 0;
+      let totalBasketCargoWeight = 0;
+
+      basket.forEach((item) => {
+        totalPalletTareWeight += item.tareWeight || 25;
+        totalPalletCost += item.unitPrice || 0;
+        Object.entries(item.radiatorCounts || {}).forEach(([szStr, cnt]) => {
+          const sz = Number(szStr);
+          const c = Number(cnt);
+          if (sz > 0 && c > 0) {
+            totalBasketCargoWeight += c * pieceWeight(sz, data.customWeights);
+          }
+        });
+      });
+
+      const effectiveCargoWeight = totalBasketCargoWeight > 0 ? totalBasketCargoWeight : data.totalWeight;
+      const grossTotalWeight = effectiveCargoWeight + totalPalletTareWeight;
+
+      const packedPallets: PackedPallet[] = [];
+      let currentX = 0;
+      let currentY = 0;
+      let currentZ = 0;
+      let maxLayerH = 0;
+      let isTooSmall = false;
+
+      basket.forEach((item, idx) => {
+        const pLen = item.length || 120;
+        const pWidth = item.width || 100;
+        const pBaseH = item.height || 15;
+        const pTotalH = pBaseH + 110;
+
+        if (pLen > truck.L || pWidth > truck.W) {
+          isTooSmall = true;
+        }
+
+        if (currentY + pWidth > truck.W) {
+          currentY = 0;
+          currentX += pLen;
+        }
+
+        if (currentX + pLen > truck.L) {
+          currentX = 0;
+          currentY = 0;
+          currentZ += maxLayerH > 0 ? maxLayerH : pTotalH;
+          maxLayerH = 0;
+        }
+
+        if (pTotalH > maxLayerH) maxLayerH = pTotalH;
+
+        if (currentZ + pTotalH > maxH) {
+          isTooSmall = true;
+        }
+
+        let pCargoW = 0;
+        const parts: string[] = [];
+        const sizes: number[] = [];
+        let radCount = 0;
+
+        Object.entries(item.radiatorCounts || {}).forEach(([szStr, cnt]) => {
+          const sz = Number(szStr);
+          const c = Number(cnt);
+          if (sz > 0 && c > 0) {
+            parts.push(`${c} عدد ${sz}cm`);
+            radCount += c;
+            pCargoW += c * pieceWeight(sz, data.customWeights);
+            for (let i = 0; i < c; i++) sizes.push(sz);
+          }
+        });
+
+        const pTareW = item.tareWeight || 25;
+        const pTotalW = pCargoW + pTareW;
+        const breakdownText = parts.length > 0 ? parts.join(' + ') : `${radCount} عدد رادیاتور`;
+
+        packedPallets.push({
+          id: item.id || `pallet_basket_${idx + 1}`,
+          index: idx + 1,
+          posX: currentX,
+          posY: currentY,
+          posZ: currentZ,
+          length: pLen,
+          width: pWidth,
+          height: pTotalH,
+          baseHeight: pBaseH,
+          material: item.material,
+          tareWeight: pTareW,
+          cargoWeight: Math.round(pCargoW),
+          totalWeight: Math.round(pTotalW),
+          radiatorCount: radCount,
+          radiatorSizes: sizes,
+          sizeBreakdown: breakdownText
+        });
+
+        currentY += pWidth;
+      });
+
+      if (isTooSmall) {
+        return {
+          ok: false,
+          reason: `ابعاد یا تعداد پالت‌های سبد (${totalPalletsNeeded} پالت) برای فضای بارگیری این خودرو (${truck.L}x${truck.W}cm) بزرگ است`,
+          truck,
+          lanesCount: 1,
+          maxLayers: 1,
+          usedLayers: 1,
+          packed: [],
+          totalPalletsNeeded,
+          palletTotalCost: totalPalletCost,
+          palletTotalWeight: Math.round(grossTotalWeight),
+          fill: 0,
+          reserve: truck.cap - grossTotalWeight,
+          approxAxle: grossTotalWeight / 2,
+          axleOk: false,
+          axleBalanceScore: 0,
+          frontAxleWeight: 0,
+          rearAxleWeight: 0
+        };
+      }
+
+      if (grossTotalWeight > truck.cap + overloadMargin) {
+        return {
+          ok: false,
+          reason: `وزن کل سبد پالت‌ها (${Math.round(grossTotalWeight)} کیلوگرم) از ظرفیت مجاز خودرو (${truck.cap} کیلوگرم) بیشتر است`,
+          truck,
+          lanesCount: 1,
+          maxLayers: 1,
+          usedLayers: 1,
+          packed: [],
+          totalPalletsNeeded,
+          palletTotalCost: totalPalletCost,
+          palletTotalWeight: Math.round(grossTotalWeight),
+          fill: 0,
+          reserve: truck.cap - grossTotalWeight,
+          approxAxle: grossTotalWeight / 2,
+          axleOk: false,
+          axleBalanceScore: 0,
+          frontAxleWeight: 0,
+          rearAxleWeight: 0
+        };
+      }
+
+      let sumWx = 0;
+      let sumWy = 0;
+      let sumWz = 0;
+      let totalW = 0;
+
+      packedPallets.forEach((p) => {
+        const px = p.posX + p.length / 2;
+        const py = p.posY + p.width / 2;
+        const pz = p.posZ + p.height / 2;
+        const w = p.totalWeight;
+        sumWx += w * px;
+        sumWy += w * py;
+        sumWz += w * pz;
+        totalW += w;
+      });
+
+      const cogX = Math.round(totalW > 0 ? sumWx / totalW : truck.L / 2);
+      const cogY = Math.round(totalW > 0 ? sumWy / totalW : truck.W / 2);
+      const cogZ = Math.round(totalW > 0 ? sumWz / totalW : 50);
+      const cogXPercent = Math.round((cogX / truck.L) * 100);
+      const cogYPercent = Math.round((cogY / truck.W) * 100);
+
+      const frontWeight = totalW * (1 - cogX / truck.L);
+      const rearWeight = totalW * (cogX / truck.L);
+      const approxAxle = Math.max(frontWeight, rearWeight);
+      const axleOk = approxAxle <= axleLimit;
+
+      const devX = Math.abs(cogXPercent - 50);
+      const devY = Math.abs(cogYPercent - 50);
+      const axleBalanceScore = Math.max(0, Math.min(100, Math.round(100 - devX * 1.5 - devY * 2)));
+
+      return {
+        ok: true,
+        truck,
+        lanesCount: 1,
+        maxLayers: 1,
+        usedLayers: 1,
+        packed: [],
+        packedPallets,
+        totalPalletsNeeded,
+        palletTotalCost: totalPalletCost,
+        palletTotalWeight: Math.round(grossTotalWeight),
+        fill: Math.min(100, Math.round((packedPallets.reduce((s, p) => s + p.length * p.width, 0) / (truck.L * truck.W)) * 100)),
+        reserve: Math.round(truck.cap - grossTotalWeight),
+        approxAxle: Math.round(approxAxle),
+        axleOk,
+        axleBalanceScore,
+        frontAxleWeight: Math.round(frontWeight),
+        rearAxleWeight: Math.round(rearWeight),
+        cogX,
+        cogY,
+        cogZ,
+        cogXPercent,
+        cogYPercent,
+        cogStatus: devX <= 5 && devY <= 3 ? 'perfect' : devX <= 12 ? 'good' : 'warning',
+        cogStatusLabel: devX <= 5 ? 'عالی و کاملاً متوازن (مرکز ثقل در محدوده ۴۵٪ تا ۵۵٪ طولی)' : 'توزیع بار سبد پالت‌ها'
+      };
+    }
+
+    // Per-Size Pallet Specification Mode (Custom Pallet Dimensions for Each Radiator Size)
+    if (palletConfig.sizeDistributionMode === 'per_size' || palletConfig.perSizeSpecs) {
+      const specs = palletConfig.perSizeSpecs || DEFAULT_PER_SIZE_PALLET_SPECS;
+      const palletsToPack: Array<{
+        size: number;
+        spec: SizePalletSpec;
+        countOnPallet: number;
+      }> = [];
+
+      Object.entries(data.counts).forEach(([szStr, totalCount]) => {
+        const sz = Number(szStr);
+        const count = Number(totalCount);
+        if (sz > 0 && count > 0) {
+          const spec: SizePalletSpec = specs[sz] || DEFAULT_PER_SIZE_PALLET_SPECS[sz as keyof typeof DEFAULT_PER_SIZE_PALLET_SPECS] || {
+            length: 120,
+            width: 100,
+            height: 15,
+            tareWeight: 25,
+            unitPrice: 180000,
+            radiatorsPerPallet: 25
+          };
+          const cap = Math.max(1, spec.radiatorsPerPallet || 25);
+          let rem = count;
+          while (rem > 0) {
+            const batch = Math.min(rem, cap);
+            palletsToPack.push({ size: sz, spec, countOnPallet: batch });
+            rem -= batch;
+          }
+        }
+      });
+
+      const totalPalletsNeeded = palletsToPack.length;
+      let totalPalletTareWeight = 0;
+      let totalPalletCost = 0;
+      let totalCargoWeight = 0;
+
+      palletsToPack.forEach((item) => {
+        totalPalletTareWeight += item.spec.tareWeight || 25;
+        totalPalletCost += item.spec.unitPrice || 0;
+        totalCargoWeight += item.countOnPallet * pieceWeight(item.size, data.customWeights);
+      });
+
+      const grossTotalWeight = totalCargoWeight + totalPalletTareWeight;
+      const packedPallets: PackedPallet[] = [];
+      let currentX = 0;
+      let currentY = 0;
+      let currentZ = 0;
+      let maxLayerH = 0;
+      let isTooSmall = false;
+
+      palletsToPack.forEach((item, idx) => {
+        const pLen = item.spec.length || 120;
+        const pWidth = item.spec.width || 100;
+        const pBaseH = item.spec.height || 15;
+        const pTotalH = pBaseH + 110;
+
+        if (pLen > truck.L || pWidth > truck.W) {
+          isTooSmall = true;
+        }
+
+        if (currentY + pWidth > truck.W) {
+          currentY = 0;
+          currentX += pLen;
+        }
+
+        if (currentX + pLen > truck.L) {
+          currentX = 0;
+          currentY = 0;
+          currentZ += maxLayerH > 0 ? maxLayerH : pTotalH;
+          maxLayerH = 0;
+        }
+
+        if (pTotalH > maxLayerH) maxLayerH = pTotalH;
+
+        if (currentZ + pTotalH > maxH) {
+          isTooSmall = true;
+        }
+
+        const cargoW = Math.round(item.countOnPallet * pieceWeight(item.size, data.customWeights));
+        const tareW = item.spec.tareWeight || 25;
+        const totalW = cargoW + tareW;
+
+        packedPallets.push({
+          id: `pallet_persize_${idx + 1}`,
+          index: idx + 1,
+          posX: currentX,
+          posY: currentY,
+          posZ: currentZ,
+          length: pLen,
+          width: pWidth,
+          height: pTotalH,
+          baseHeight: pBaseH,
+          material: palletConfig.material || 'wooden',
+          tareWeight: tareW,
+          cargoWeight: cargoW,
+          totalWeight: totalW,
+          radiatorCount: item.countOnPallet,
+          radiatorSizes: Array(item.countOnPallet).fill(item.size),
+          sizeBreakdown: `${item.countOnPallet} عدد ${item.size}cm (پالت ${pLen}×${pWidth}cm)`
+        });
+
+        currentY += pWidth;
+      });
+
+      if (isTooSmall) {
+        return {
+          ok: false,
+          reason: `ابعاد پالت‌های اختصاصی (${totalPalletsNeeded} پالت) برای فضای بارگیری این خودرو (${truck.L}x${truck.W}cm) بزرگ است`,
+          truck,
+          lanesCount: 1,
+          maxLayers: 1,
+          usedLayers: 1,
+          packed: [],
+          totalPalletsNeeded,
+          palletTotalCost: totalPalletCost,
+          palletTotalWeight: Math.round(grossTotalWeight),
+          fill: 0,
+          reserve: truck.cap - grossTotalWeight,
+          approxAxle: grossTotalWeight / 2,
+          axleOk: false,
+          axleBalanceScore: 0,
+          frontAxleWeight: 0,
+          rearAxleWeight: 0
+        };
+      }
+
+      if (grossTotalWeight > truck.cap + overloadMargin) {
+        return {
+          ok: false,
+          reason: `وزن کل پالت‌های بارگیری‌شده (${Math.round(grossTotalWeight)} کیلوگرم) از ظرفیت مجاز خودرو (${truck.cap} کیلوگرم) بیشتر است`,
+          truck,
+          lanesCount: 1,
+          maxLayers: 1,
+          usedLayers: 1,
+          packed: [],
+          totalPalletsNeeded,
+          palletTotalCost: totalPalletCost,
+          palletTotalWeight: Math.round(grossTotalWeight),
+          fill: 0,
+          reserve: truck.cap - grossTotalWeight,
+          approxAxle: grossTotalWeight / 2,
+          axleOk: false,
+          axleBalanceScore: 0,
+          frontAxleWeight: 0,
+          rearAxleWeight: 0
+        };
+      }
+
+      let sumWx = 0;
+      let sumWy = 0;
+      let sumWz = 0;
+      let totalW = 0;
+
+      packedPallets.forEach((p) => {
+        const px = p.posX + p.length / 2;
+        const py = p.posY + p.width / 2;
+        const pz = p.posZ + p.height / 2;
+        const w = p.totalWeight;
+        sumWx += w * px;
+        sumWy += w * py;
+        sumWz += w * pz;
+        totalW += w;
+      });
+
+      const cogX = Math.round(totalW > 0 ? sumWx / totalW : truck.L / 2);
+      const cogY = Math.round(totalW > 0 ? sumWy / totalW : truck.W / 2);
+      const cogZ = Math.round(totalW > 0 ? sumWz / totalW : 50);
+      const cogXPercent = Math.round((cogX / truck.L) * 100);
+      const cogYPercent = Math.round((cogY / truck.W) * 100);
+
+      const frontWeight = totalW * (1 - cogX / truck.L);
+      const rearWeight = totalW * (cogX / truck.L);
+      const approxAxle = Math.max(frontWeight, rearWeight);
+      const axleOk = approxAxle <= axleLimit;
+
+      const devX = Math.abs(cogXPercent - 50);
+      const devY = Math.abs(cogYPercent - 50);
+      const axleBalanceScore = Math.max(0, Math.min(100, Math.round(100 - devX * 1.5 - devY * 2)));
+
+      return {
+        ok: true,
+        truck,
+        lanesCount: 1,
+        maxLayers: 1,
+        usedLayers: 1,
+        packed: [],
+        packedPallets,
+        totalPalletsNeeded,
+        palletTotalCost: totalPalletCost,
+        palletTotalWeight: Math.round(grossTotalWeight),
+        fill: Math.min(100, Math.round((packedPallets.reduce((s, p) => s + p.length * p.width, 0) / (truck.L * truck.W)) * 100)),
+        reserve: Math.round(truck.cap - grossTotalWeight),
+        approxAxle: Math.round(approxAxle),
+        axleOk,
+        axleBalanceScore,
+        frontAxleWeight: Math.round(frontWeight),
+        rearAxleWeight: Math.round(rearWeight),
+        cogX,
+        cogY,
+        cogZ,
+        cogXPercent,
+        cogYPercent,
+        cogStatus: devX <= 5 && devY <= 3 ? 'perfect' : devX <= 12 ? 'good' : 'warning',
+        cogStatusLabel: devX <= 5 ? 'عالی و کاملاً متوازن (مرکز ثقل در محدوده ۴۵٪ تا ۵۵٪ طولی)' : 'توزیع بار پالت‌های اختصاصی سایزها'
+      };
+    }
+
     const pLen = palletConfig.length || 120;
     const pWidth = palletConfig.width || 100;
     const pBaseHeight = palletConfig.height || 15;
@@ -184,7 +608,7 @@ export function evaluateTruck(
     const pTotalH = pBaseHeight + pStackCargoH;
     
     // Calculate total pallets needed
-    const radsPerPallet = Math.max(1, palletConfig.radiatorsPerPallet || 20);
+    const radsPerPallet = Math.max(1, palletConfig.radiatorsPerPallet || 25);
     const calculatedPalletCount = Math.ceil(data.totalPieces / radsPerPallet);
     const totalPalletsNeeded = palletConfig.customPalletCount > 0 ? palletConfig.customPalletCount : Math.max(1, calculatedPalletCount);
     
@@ -296,6 +720,43 @@ export function evaluateTruck(
     let palletIdx = 0;
     const avgCargoW = data.totalWeight / Math.max(1, totalPalletsNeeded);
 
+    // Build size breakdown summary for each pallet
+    let palletSizes: number[] = [];
+    let palletBreakdownText = '';
+
+    if (palletConfig.sizeDistributionMode === 'custom' && palletConfig.customSizeCounts) {
+      const parts: string[] = [];
+      const sizes: number[] = [];
+      Object.entries(palletConfig.customSizeCounts).forEach(([szStr, cnt]) => {
+        const sz = Number(szStr);
+        const c = Number(cnt);
+        if (sz > 0 && c > 0) {
+          parts.push(`${c} عدد ${sz}cm`);
+          for (let i = 0; i < c; i++) sizes.push(sz);
+        }
+      });
+      palletSizes = sizes;
+      palletBreakdownText = parts.length > 0 ? parts.join(' + ') : `${radsPerPallet} عدد رادیاتور`;
+    } else {
+      // Auto distribution: divide active items among total pallets
+      const sizesMap: Record<number, number> = {};
+      data.items.forEach((sz) => {
+        sizesMap[sz] = (sizesMap[sz] || 0) + 1;
+      });
+      const parts: string[] = [];
+      const sizes: number[] = [];
+      Object.entries(sizesMap).forEach(([szStr, totalCount]) => {
+        const sz = Number(szStr);
+        const countPerPallet = Math.max(1, Math.round(totalCount / totalPalletsNeeded));
+        if (countPerPallet > 0) {
+          parts.push(`${countPerPallet} عدد ${sz}cm`);
+          for (let i = 0; i < countPerPallet; i++) sizes.push(sz);
+        }
+      });
+      palletSizes = sizes.length > 0 ? sizes : [100, 120];
+      palletBreakdownText = parts.length > 0 ? parts.join(' + ') : `${radsPerPallet} عدد رادیاتور`;
+    }
+
     for (let layer = 0; layer < maxHeightLayers && palletIdx < totalPalletsNeeded; layer++) {
       for (let c = 0; c < cols && palletIdx < totalPalletsNeeded; c++) {
         for (let r = 0; r < rows && palletIdx < totalPalletsNeeded; r++) {
@@ -320,8 +781,9 @@ export function evaluateTruck(
             tareWeight: palletTareWeight,
             cargoWeight: Math.round(avgCargoW),
             totalWeight: Math.round(pWeight),
-            radiatorCount: radsPerPallet,
-            radiatorSizes: [100, 120]
+            radiatorCount: palletSizes.length > 0 ? palletSizes.length : radsPerPallet,
+            radiatorSizes: palletSizes,
+            sizeBreakdown: palletBreakdownText
           });
         }
       }
@@ -643,12 +1105,13 @@ export function getVehicleRecommendations(
       }
     }
 
-    const weightFillPercent = Math.min(100, Math.round((data.totalWeight / preset.cap) * 100));
+    const effectiveWeight = res.palletTotalWeight && res.palletTotalWeight > 0 ? res.palletTotalWeight : data.totalWeight;
+    const weightFillPercent = Math.min(100, Math.round((effectiveWeight / preset.cap) * 100));
     const volumeFillPercent = Math.round(res.fill || 0);
 
     let statusType: 'best' | 'feasible' | 'overload' | 'too_small' = 'feasible';
     if (!res.ok) {
-      if (data.totalWeight > preset.cap + overloadMargin) {
+      if (effectiveWeight > preset.cap + overloadMargin) {
         statusType = 'overload';
       } else {
         statusType = 'too_small';
@@ -669,15 +1132,13 @@ export function getVehicleRecommendations(
   const feasible = evaluations.filter((e) => e.result.ok);
 
   // Sort feasible vehicles:
-  // 1. Smallest weight capacity (cost efficiency - cheapest adequate transport)
-  // 2. Highest volume fill percentage
-  // 3. Fewer layers required
+  // Prioritize vehicles that fill maximum capacity (highest weight fill percentage & volume fill percentage)
   feasible.sort((a, b) => {
-    if (a.preset.cap !== b.preset.cap) {
-      return a.preset.cap - b.preset.cap;
+    if (b.weightFillPercent !== a.weightFillPercent) {
+      return b.weightFillPercent - a.weightFillPercent;
     }
-    if (b.result.fill !== a.result.fill) {
-      return b.result.fill - a.result.fill;
+    if (b.volumeFillPercent !== a.volumeFillPercent) {
+      return b.volumeFillPercent - a.volumeFillPercent;
     }
     return a.result.usedLayers - b.result.usedLayers;
   });

@@ -6,6 +6,27 @@ export type CustomWeights = Record<number, number>;
 
 export type PalletMaterial = 'wooden' | 'metal' | 'plastic';
 
+export interface CustomPalletItem {
+  id: string;
+  name?: string;
+  material: PalletMaterial;
+  length: number; // Length in cm
+  width: number; // Width in cm
+  height: number; // Base height in cm
+  tareWeight: number; // Empty pallet weight in kg
+  unitPrice: number; // Unit price in Toman
+  radiatorCounts: Record<number, number>; // Radiator count per size on this specific pallet
+}
+
+export interface SizePalletSpec {
+  length: number; // Length in cm
+  width: number; // Width in cm
+  height: number; // Base height in cm
+  tareWeight: number; // Empty pallet weight in kg
+  unitPrice: number; // Price per pallet in Toman
+  radiatorsPerPallet: number; // Capacity per pallet
+}
+
 export interface PalletConfig {
   usePallets: boolean;
   material: PalletMaterial;
@@ -16,6 +37,10 @@ export interface PalletConfig {
   unitPrice: number; // Unit price per pallet in Toman
   radiatorsPerPallet: number; // Number of radiators loaded per pallet
   customPalletCount: number; // Optional manual override of pallet count (0 = auto)
+  sizeDistributionMode?: 'auto' | 'custom' | 'basket' | 'per_size'; // 'auto', 'custom', 'basket', or 'per_size'
+  customSizeCounts?: Record<number, number>; // How many radiators of size 60, 80, 100, 120, 140, 160, 180 per pallet
+  customPalletBasket?: CustomPalletItem[]; // Multi-pallet basket with individual dimensions & radiator combinations
+  perSizeSpecs?: Record<number, SizePalletSpec>; // Custom pallet dimensions for each radiator size (60, 80, 100, 120, 140, 160, 180)
 }
 
 export interface VehiclePreset {
@@ -145,6 +170,7 @@ export interface PackedPallet {
   totalWeight: number;
   radiatorCount: number;
   radiatorSizes: number[];
+  sizeBreakdown?: string;
   stopId?: string;
 }
 

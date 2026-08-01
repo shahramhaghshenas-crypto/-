@@ -74,7 +74,7 @@ export const VehicleRecommendationCard: React.FC<VehicleRecommendationCardProps>
             پیشنهاد هوشمند ماشین بر اساس تعداد لایه‌ها ({toPersianDigits(targetLayers)} لایه)
           </h3>
           <p className="text-xs text-slate-400 mt-1">
-            ارزیابی درصد پر شدن، گنجایش حجمی و توازن وزن برای {toPersianDigits(data.totalPieces)} عدد رادیاتور ({toPersianDigits(Math.round(data.totalWeight))} کیلوگرم)
+            ارزیابی درصد پر شدن، گنجایش حجمی و توازن وزن برای {toPersianDigits(data.totalPieces)} عدد رادیاتور ({toPersianDigits(Math.round(palletConfig.usePallets && rec.bestResult?.palletTotalWeight ? rec.bestResult.palletTotalWeight : data.totalWeight))} کیلوگرم{palletConfig.usePallets ? ' با پالت' : ''})
           </p>
         </div>
 
@@ -104,10 +104,10 @@ export const VehicleRecommendationCard: React.FC<VehicleRecommendationCardProps>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-emerald-400 bg-emerald-900/60 px-2.5 py-0.5 rounded-full border border-emerald-700/60">
-                  بهترین پیشنهاد هوشمند
+                  بیشترین میزان پرشدگی ظرفیت
                 </span>
-                <span className="text-xs text-slate-400">
-                  (کمترین هزینه با بالاترین راندمان بارگیری)
+                <span className="text-xs text-slate-300">
+                  (خودرویی که بیشترین میزان ظرفیت آن پر می‌شود: {toPersianDigits(Math.round(bestOption.result.fill))}٪)
                 </span>
               </div>
               <h4 className="text-lg font-black text-white mt-1 flex items-center gap-2">

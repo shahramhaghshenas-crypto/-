@@ -1,5 +1,5 @@
-import React from 'react';
-import { Sliders, ShieldCheck, CheckSquare, Eye, Box, Layers } from 'lucide-react';
+import React, { useState } from 'react';
+import { Sliders, ShieldCheck, CheckSquare, CheckCircle2, Eye, Box, Layers } from 'lucide-react';
 import { LayoutRules, FeatureAccess } from '../types';
 import { clamp, toPersianDigits } from '../utils/persianDigits';
 
@@ -23,6 +23,9 @@ export const LayoutRulesCard: React.FC<LayoutRulesCardProps> = ({
     ? rules.manualLayers
     : Math.max(1, Math.floor(rules.maxH / rules.layerH));
 
+  const [confirmedLayers, setConfirmedLayers] = useState<number>(currentLayers);
+  const [justConfirmed, setJustConfirmed] = useState<boolean>(false);
+
   const handleMaxHChange = (val: number) => {
     const safeH = clamp(val, 11, 350);
     const newLayers = Math.max(1, Math.floor(safeH / rules.layerH));
@@ -37,6 +40,13 @@ export const LayoutRulesCard: React.FC<LayoutRulesCardProps> = ({
       manualLayers: safeLayers,
       maxH: calculatedH
     });
+  };
+
+  const handleConfirmLayers = () => {
+    setConfirmedLayers(currentLayers);
+    setJustConfirmed(true);
+    onRunCalc();
+    setTimeout(() => setJustConfirmed(false), 3000);
   };
 
   return (
@@ -126,6 +136,36 @@ export const LayoutRulesCard: React.FC<LayoutRulesCardProps> = ({
               );
             })}
           </div>
+        </div>
+
+        {/* Dedicated Confirm Layer Count Action Button */}
+        <div className="mt-4 pt-3 border-t border-blue-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs">
+            {confirmedLayers === currentLayers ? (
+              <span className="flex items-center gap-1.5 font-bold text-emerald-800 bg-emerald-100/90 px-3 py-1.5 rounded-xl border border-emerald-300">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                تعداد {toPersianDigits(currentLayers)} لایه تأیید شد | آماده نمایش سه‌بعدی و انتخاب بهینه‌ترین ماشین
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 font-bold text-amber-900 bg-amber-100/90 px-3 py-1.5 rounded-xl border border-amber-300">
+                <Layers className="w-4 h-4 text-amber-600" />
+                تعداد لایه‌ها تغییر یافته است ({toPersianDigits(currentLayers)} لایه) — جهت ثبت دکمه زیر را فشار دهید
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleConfirmLayers}
+            className={`w-full sm:w-auto px-6 py-2.5 rounded-xl font-black text-xs md:text-sm transition flex items-center justify-center gap-2 shadow-md shrink-0 ${
+              justConfirmed || confirmedLayers === currentLayers
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 animate-pulse'
+            }`}
+          >
+            <CheckCircle2 className="w-4.5 h-4.5" />
+            تأیید تعداد لایه‌ها و اعمال چیدمان سه‌بعدی
+          </button>
         </div>
       </div>
 

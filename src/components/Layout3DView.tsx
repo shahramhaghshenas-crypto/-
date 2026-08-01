@@ -102,16 +102,16 @@ export const Layout3DView: React.FC<Layout3DViewProps> = React.memo(({ evalResul
     // 3. Renderer Setup
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.BasicShadowMap;
     rendererRef.current = renderer;
     targetMount.appendChild(renderer.domElement);
 
     // 4. OrbitControls with full 360° rotation and multi-touch support
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    controls.dampingFactor = 0.08;
     controls.enableZoom = true;
     controls.zoomSpeed = 1.2;
     controls.enableRotate = true;
@@ -136,14 +136,14 @@ export const Layout3DView: React.FC<Layout3DViewProps> = React.memo(({ evalResul
     controlsRef.current = controls;
 
     // 5. Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
     scene.add(ambientLight);
 
-    const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.9);
+    const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.85);
     dirLight1.position.set(500, 800, 400);
     dirLight1.castShadow = true;
-    dirLight1.shadow.mapSize.width = 2048;
-    dirLight1.shadow.mapSize.height = 2048;
+    dirLight1.shadow.mapSize.width = 1024;
+    dirLight1.shadow.mapSize.height = 1024;
     dirLight1.shadow.camera.near = 10;
     dirLight1.shadow.camera.far = 2000;
     scene.add(dirLight1);
@@ -349,8 +349,10 @@ export const Layout3DView: React.FC<Layout3DViewProps> = React.memo(({ evalResul
           mesh: cargoMesh,
           data: {
             title: `پالت شماره ${toPersianDigits(idx + 1)} (${pallet.material === 'wooden' ? 'چوبی' : pallet.material === 'metal' ? 'فلزی' : 'پلاستیکی'})`,
-            details: `تعداد رادیاتور: ${toPersianDigits(pallet.radiatorCount)} عدد | ابعاد: ${toPersianDigits(pallet.length)}×${toPersianDigits(pallet.width)}cm`,
-            weight: `${fmtPersian(pallet.totalWeight, 0)} kg`,
+            details: pallet.sizeBreakdown
+              ? `ترکیب بار: ${pallet.sizeBreakdown} | ابعاد: ${toPersianDigits(pallet.length)}×${toPersianDigits(pallet.width)}cm`
+              : `تعداد رادیاتور: ${toPersianDigits(pallet.radiatorCount)} عدد | ابعاد: ${toPersianDigits(pallet.length)}×${toPersianDigits(pallet.width)}cm`,
+            weight: `وزن کل: ${fmtPersian(pallet.totalWeight, 0)} kg (کالا: ${fmtPersian(pallet.cargoWeight, 0)} kg + پالت: ${fmtPersian(pallet.tareWeight, 0)} kg)`,
             location: `موقعیت: x=${toPersianDigits(pallet.posX)}cm, y=${toPersianDigits(pallet.posY)}cm`
           }
         });
@@ -581,40 +583,62 @@ export const Layout3DView: React.FC<Layout3DViewProps> = React.memo(({ evalResul
     };
     animate();
 
-    // 12. Mouse move handler for Raycasting Tooltips
+    // 12. Mouse move handler for Raycasting Tooltips (Optimized to avoid re-renders on every pixel move)
     const domElem = renderer.domElement;
+    const interactiveMeshes = interactiveMeshesRef.current.map((i) => i.mesh);
+    let lastHoveredTitle: string | null = null;
+
     const handleMouseMove = (event: MouseEvent) => {
       const rect = domElem.getBoundingClientRect();
       mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-      if (!cameraRef.current) return;
+      if (!cameraRef.current || interactiveMeshes.length === 0) return;
       raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
 
-      const intersects = raycasterRef.current.intersectObjects(
-        interactiveMeshesRef.current.map((i) => i.mesh)
-      );
+      const intersects = raycasterRef.current.intersectObjects(interactiveMeshes, false);
 
       if (intersects.length > 0) {
         const hitMesh = intersects[0].object as THREE.Mesh;
         const found = interactiveMeshesRef.current.find((i) => i.mesh === hitMesh);
         if (found) {
-          setHoveredInfo(found.data);
+          if (lastHoveredTitle !== found.data.title) {
+            lastHoveredTitle = found.data.title;
+            setHoveredInfo(found.data);
+          }
           domElem.style.cursor = 'pointer';
         }
       } else {
-        setHoveredInfo(null);
+        if (lastHoveredTitle !== null) {
+          lastHoveredTitle = null;
+          setHoveredInfo(null);
+        }
         domElem.style.cursor = 'grab';
       }
     };
 
-    domElem.addEventListener('mousemove', handleMouseMove);
+    domElem.addEventListener('mousemove', handleMouseMove, { passive: true });
 
-    // Cleanup on unmount or re-render
+    // Cleanup on unmount or re-render (Dispose GPU Geometries, Materials, and Textures)
     return () => {
       if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
       domElem.removeEventListener('mousemove', handleMouseMove);
       controls.dispose();
+
+      scene.traverse((object) => {
+        if ((object as THREE.Mesh).isMesh) {
+          const mesh = object as THREE.Mesh;
+          if (mesh.geometry) mesh.geometry.dispose();
+          if (mesh.material) {
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((mat) => mat.dispose());
+            } else {
+              mesh.material.dispose();
+            }
+          }
+        }
+      });
+
       renderer.dispose();
       if (targetMount && renderer.domElement && targetMount.contains(renderer.domElement)) {
         targetMount.removeChild(renderer.domElement);
@@ -680,13 +704,13 @@ export const Layout3DView: React.FC<Layout3DViewProps> = React.memo(({ evalResul
           </div>
           <div>
             <h3 className="text-base md:text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              مدل سه‌بعدی و شبیه‌ساز زنده چیدمان کالا ({truck.name})
+              طرح سه‌بعدی چیدمان برای {toPersianDigits(usedLayers)} لایه تأیید شده ({truck.name})
               <span className="text-xs font-normal px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                تعاملی 3D
+                لایه‌های تأیید شده
               </span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              قابلیت چرخش ۳۶۰ درجه، زوم، مشاهده تفکیک لایه‌ها و جزئیات هر رادیاتور
+              نمایش سه‌بعدی چیدمان بر اساس لایه‌های تأیید شده و خودرو با بیشترین بهره‌وری ظرفیت ({toPersianDigits(Math.round(evalResult.fill || 0))}٪ پر شده)
             </p>
           </div>
         </div>

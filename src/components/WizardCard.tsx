@@ -271,6 +271,7 @@ export const WizardCard: React.FC<WizardCardProps> = ({
                 config={palletConfig}
                 onChange={onPalletConfigChange}
                 totalRadiators={totalPieces}
+                radiatorCounts={counts}
                 access={getFeatureAccess('pallets')}
               />
             </div>

@@ -2,6 +2,16 @@ import { VehiclePreset, UserProfileKey, FeatureKey, FeatureDef, PluginModule, Fe
 
 export const RADIATOR_SIZES = [60, 80, 100, 120, 140, 160, 180] as const;
 
+export const DEFAULT_PER_SIZE_PALLET_SPECS = {
+  60: { length: 80, width: 80, height: 15, tareWeight: 18, unitPrice: 150000, radiatorsPerPallet: 25 },
+  80: { length: 100, width: 90, height: 15, tareWeight: 20, unitPrice: 160000, radiatorsPerPallet: 25 },
+  100: { length: 120, width: 100, height: 15, tareWeight: 25, unitPrice: 180000, radiatorsPerPallet: 25 },
+  120: { length: 140, width: 100, height: 15, tareWeight: 28, unitPrice: 200000, radiatorsPerPallet: 25 },
+  140: { length: 160, width: 110, height: 15, tareWeight: 32, unitPrice: 220000, radiatorsPerPallet: 25 },
+  160: { length: 180, width: 110, height: 15, tareWeight: 36, unitPrice: 250000, radiatorsPerPallet: 25 },
+  180: { length: 200, width: 110, height: 15, tareWeight: 40, unitPrice: 280000, radiatorsPerPallet: 25 },
+};
+
 export const DEFAULT_PALLET_CONFIG: PalletConfig = {
   usePallets: false,
   material: 'wooden',
@@ -10,8 +20,20 @@ export const DEFAULT_PALLET_CONFIG: PalletConfig = {
   height: 15,  // 15 cm base height
   tareWeight: 25, // 25 kg wooden pallet
   unitPrice: 180000, // 180,000 Toman for wooden pallet
-  radiatorsPerPallet: 20, // 20 radiators per pallet default
-  customPalletCount: 0
+  radiatorsPerPallet: 25, // 25 radiators per pallet default
+  customPalletCount: 0,
+  sizeDistributionMode: 'per_size',
+  customSizeCounts: {
+    60: 0,
+    80: 0,
+    100: 10,
+    120: 10,
+    140: 0,
+    160: 0,
+    180: 0
+  },
+  customPalletBasket: [],
+  perSizeSpecs: DEFAULT_PER_SIZE_PALLET_SPECS
 };
 
 export const PALLET_MATERIAL_PRESETS: Record<'wooden' | 'metal' | 'plastic', { name: string; tareWeight: number; unitPrice: number; icon: string; color: string }> = {

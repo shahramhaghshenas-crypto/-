@@ -123,9 +123,13 @@ export const CalculationResultView: React.FC<CalculationResultViewProps> = React
           <span className="text-lg font-black text-slate-900">{fmtPersian(data.totalPieces)}</span>
         </div>
 
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-          <span className="text-[11px] text-slate-500 block">وزن کل بار</span>
-          <span className="text-lg font-black text-amber-700">{fmtPersian(data.totalWeight, 0)} kg</span>
+        <div className="bg-slate-50 border border-amber-200 bg-amber-50/40 rounded-xl p-3">
+          <span className="text-[11px] text-slate-500 block">
+            {result?.palletTotalWeight ? 'وزن کل ناخالص (با پالت)' : 'وزن کل بار'}
+          </span>
+          <span className="text-lg font-black text-amber-800">
+            {fmtPersian(result?.palletTotalWeight || data.totalWeight, 0)} kg
+          </span>
         </div>
 
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
@@ -282,6 +286,49 @@ export const CalculationResultView: React.FC<CalculationResultViewProps> = React
           </div>
         </div>
       </div>
+
+      {/* Pallet Detailed Loading Breakdown Card */}
+      {result.packedPallets && result.packedPallets.length > 0 && (
+        <div className="bg-amber-50/70 border border-amber-300 rounded-2xl p-4.5 mb-6 text-xs text-slate-800 space-y-3">
+          <div className="flex items-center justify-between border-b border-amber-200 pb-2.5">
+            <div className="flex items-center gap-2 text-amber-900 font-black text-sm">
+              <span className="w-6 h-6 bg-amber-500 text-white rounded-lg flex items-center justify-center font-bold text-xs">📦</span>
+              <span>جزئیات چیدمان پالت‌ها ({toPersianDigits(result.totalPalletsNeeded || result.packedPallets.length)} پالت چیده‌شده)</span>
+            </div>
+            <span className="text-amber-800 font-bold bg-amber-100 px-3 py-1 rounded-full border border-amber-300">
+              وزن کل با پالت: {fmtPersian(result.palletTotalWeight || data.totalWeight, 0)} کیلوگرم
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="bg-white p-3 rounded-xl border border-amber-200/80 space-y-1">
+              <span className="font-bold text-amber-950 block text-xs">ترکیب کالا روی هر پالت:</span>
+              <p className="text-slate-700 font-semibold">
+                • {result.packedPallets[0]?.sizeBreakdown || `${result.packedPallets[0]?.radiatorCount || 20} عدد رادیاتور`}
+              </p>
+              <p className="text-slate-500 text-[11px]">
+                وزن رادیاتورهای ۱ پالت: <strong>{toPersianDigits(result.packedPallets[0]?.cargoWeight || 0)} kg</strong> | وزن خالی ۱ پالت: <strong>{toPersianDigits(result.packedPallets[0]?.tareWeight || 25)} kg</strong>
+              </p>
+              <p className="text-amber-800 text-[11px] font-bold">
+                = وزن ناخالص ۱ پالت: {toPersianDigits(result.packedPallets[0]?.totalWeight || 0)} کیلوگرم
+              </p>
+            </div>
+
+            <div className="bg-white p-3 rounded-xl border border-amber-200/80 space-y-1">
+              <span className="font-bold text-amber-950 block text-xs">جمع کل بارگیری پالت‌ها:</span>
+              <p className="text-slate-700">
+                • تعداد پالت‌ها: <strong>{toPersianDigits(result.totalPalletsNeeded || result.packedPallets.length)} عدد</strong>
+              </p>
+              <p className="text-slate-700">
+                • وزن کل اضافه شده پالت‌ها: <strong>{toPersianDigits((result.totalPalletsNeeded || result.packedPallets.length) * (result.packedPallets[0]?.tareWeight || 25))} کیلوگرم</strong>
+              </p>
+              <p className="text-emerald-700 font-bold text-[11px]">
+                ✓ این وزن اضافه به صورت کامل در بررسی توان حمل خودرو و مرکز ثقل لحاظ گردیده است.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Text Manifest Breakdown Box */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 leading-relaxed text-xs text-slate-700 font-mono whitespace-pre-wrap">

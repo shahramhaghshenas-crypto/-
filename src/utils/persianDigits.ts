@@ -1,12 +1,11 @@
 export function toPersianDigits(n: number | string | undefined | null): string {
   if (n === undefined || n === null || n === '') return '';
-  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-  return String(n).replace(/\d/g, (x) => persianDigits[parseInt(x, 10)]);
+  return String(n);
 }
 
 export function fmtPersian(n: number | undefined | null, decimals: number = 0): string {
-  if (n === undefined || n === null || isNaN(n)) return '۰';
-  const formatted = Number(n).toLocaleString('fa-IR', {
+  if (n === undefined || n === null || isNaN(n)) return '0';
+  const formatted = Number(n).toLocaleString('en-US', {
     maximumFractionDigits: decimals,
     minimumFractionDigits: decimals,
   });
@@ -16,3 +15,4 @@ export function fmtPersian(n: number | undefined | null, decimals: number = 0): 
 export function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
+
