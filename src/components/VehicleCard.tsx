@@ -1,9 +1,7 @@
 import React from 'react';
-import { Truck, AlertCircle, Sparkles } from 'lucide-react';
+import { Truck, AlertCircle, Sparkles, Award } from 'lucide-react';
 import { TruckDetails, FeatureAccess } from '../types';
 import { VEHICLE_PRESETS } from '../data/presets';
-import { VehicleRecommendation } from '../utils/calculation';
-import { VehicleRecommendationPanel } from './VehicleRecommendationPanel';
 import { toPersianDigits } from '../utils/persianDigits';
 
 interface VehicleCardProps {
@@ -14,7 +12,9 @@ interface VehicleCardProps {
   access?: FeatureAccess;
   onManualCustomized?: () => void;
   autoVehicleActive?: boolean;
-  recommendation?: VehicleRecommendation;
+  onSelectBestVehicle?: () => void;
+  bestVehicleName?: string;
+  bestVehicleFill?: number;
 }
 
 export const VehicleCard: React.FC<VehicleCardProps> = ({
@@ -25,7 +25,9 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
   access = 'active',
   onManualCustomized,
   autoVehicleActive = false,
-  recommendation
+  onSelectBestVehicle,
+  bestVehicleName,
+  bestVehicleFill
 }) => {
   if (access === 'disabled') return null;
   const isReadOnly = access === 'view';
@@ -76,14 +78,42 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
         )}
       </div>
 
-      {/* Recommendation Panel */}
-      {recommendation && (
-        <VehicleRecommendationPanel
-          recommendation={recommendation}
-          onSelectPreset={handlePresetSelect}
-          selectedPresetIndex={selectedIndex}
-        />
-      )}
+      {/* Feature banner to select best vehicle with highest fill capacity */}
+      <div className="mb-5 p-3.5 bg-gradient-to-r from-emerald-900/90 via-slate-900 to-blue-950 text-white rounded-2xl border border-emerald-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 flex items-center justify-center font-black shrink-0">
+            <Award className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-emerald-300">
+                پیشنهاد هوشمند بالاترین گنجایش (Best Fill Capacity)
+              </span>
+              {bestVehicleFill ? (
+                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 rounded text-[10px] font-bold">
+                  {toPersianDigits(Math.round(bestVehicleFill))}٪ پرشدگی
+                </span>
+              ) : null}
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              {bestVehicleName
+                ? `ماشین پیشنهادی با بالاترین بازده: «${bestVehicleName}»`
+                : 'انتخاب خودکار ماشینی که بیشترین میزان از فضای آن پر می‌شود'}
+            </p>
+          </div>
+        </div>
+
+        {onSelectBestVehicle && (
+          <button
+            type="button"
+            onClick={onSelectBestVehicle}
+            className="w-full sm:w-auto px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 shrink-0 border border-emerald-300 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-slate-950" />
+            <span>انتخاب بهترین ماشین با بیشترین ظرفیت پر شوندگی</span>
+          </button>
+        )}
+      </div>
 
       {/* Preset vehicle selector pills */}
       <div className="mb-5">

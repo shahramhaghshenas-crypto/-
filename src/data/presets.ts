@@ -1,8 +1,9 @@
 import { VehiclePreset, UserProfileKey, FeatureKey, FeatureDef, PluginModule, FeatureAccess, PalletConfig } from '../types';
 
-export const RADIATOR_SIZES = [60, 80, 100, 120, 140, 160, 180] as const;
+export const RADIATOR_SIZES = [40, 60, 80, 100, 120, 140, 160, 180, 200] as const;
 
 export const DEFAULT_PER_SIZE_PALLET_SPECS = {
+  40: { length: 60, width: 80, height: 15, tareWeight: 15, unitPrice: 130000, radiatorsPerPallet: 30 },
   60: { length: 80, width: 80, height: 15, tareWeight: 18, unitPrice: 150000, radiatorsPerPallet: 25 },
   80: { length: 100, width: 90, height: 15, tareWeight: 20, unitPrice: 160000, radiatorsPerPallet: 25 },
   100: { length: 120, width: 100, height: 15, tareWeight: 25, unitPrice: 180000, radiatorsPerPallet: 25 },
@@ -10,6 +11,7 @@ export const DEFAULT_PER_SIZE_PALLET_SPECS = {
   140: { length: 160, width: 110, height: 15, tareWeight: 32, unitPrice: 220000, radiatorsPerPallet: 25 },
   160: { length: 180, width: 110, height: 15, tareWeight: 36, unitPrice: 250000, radiatorsPerPallet: 25 },
   180: { length: 200, width: 110, height: 15, tareWeight: 40, unitPrice: 280000, radiatorsPerPallet: 25 },
+  200: { length: 220, width: 110, height: 15, tareWeight: 44, unitPrice: 300000, radiatorsPerPallet: 25 },
 };
 
 export const DEFAULT_PALLET_CONFIG: PalletConfig = {
@@ -24,13 +26,15 @@ export const DEFAULT_PALLET_CONFIG: PalletConfig = {
   customPalletCount: 0,
   sizeDistributionMode: 'per_size',
   customSizeCounts: {
+    40: 0,
     60: 0,
     80: 0,
     100: 10,
     120: 10,
     140: 0,
     160: 0,
-    180: 0
+    180: 0,
+    200: 0
   },
   customPalletBasket: [],
   perSizeSpecs: DEFAULT_PER_SIZE_PALLET_SPECS

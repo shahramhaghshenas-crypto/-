@@ -8,6 +8,14 @@ export function pieceWeight(len: number, customWeights?: CustomWeights): number 
   return 27 * (len / 100);
 }
 
+/**
+ * Calculates total packaged length in cm based on nominal size in cm.
+ * Standard packaging adds 60 mm (6 cm) to nominal radiator length (e.g. 100cm -> 106cm, 1000mm -> 1060mm).
+ */
+export function getPackagedLength(nominalCm: number): number {
+  return nominalCm + 6;
+}
+
 export function buildRadiatorData(counts: RadiatorCounts, stops?: DestinationStop[], customWeights?: CustomWeights): RadiatorData {
   let totalPieces = 0;
   let totalMeter = 0;
@@ -75,21 +83,22 @@ export function packOneLayer(
 
   for (const item of items) {
     const itemW = pieceWeight(item, customWeights);
+    const packagedL = getPackagedLength(item);
     let bestIdx = -1;
     let minLaneWeight = 1e9;
     let bestRem = 1e9;
 
     // Pick lane with enough space that balances weight across lanes (Lateral CoG)
     for (let i = 0; i < lanes.length; i++) {
-      if (lanes[i].rem >= item) {
+      if (lanes[i].rem >= packagedL) {
         // Prefer lane with lowest total weight for left-right balance
         if (laneWeights[i] < minLaneWeight) {
           minLaneWeight = laneWeights[i];
           bestIdx = i;
-          bestRem = lanes[i].rem - item;
-        } else if (laneWeights[i] === minLaneWeight && lanes[i].rem - item < bestRem) {
+          bestRem = lanes[i].rem - packagedL;
+        } else if (laneWeights[i] === minLaneWeight && lanes[i].rem - packagedL < bestRem) {
           bestIdx = i;
-          bestRem = lanes[i].rem - item;
+          bestRem = lanes[i].rem - packagedL;
         }
       }
     }
@@ -104,7 +113,7 @@ export function packOneLayer(
       weight: itemW,
       scanned: false
     });
-    lanes[bestIdx].rem -= item;
+    lanes[bestIdx].rem -= packagedL;
     laneWeights[bestIdx] += itemW;
   }
 
@@ -139,7 +148,7 @@ export function splitItemsIntoLayers(
         const candidate = [...layers[layerIdx], item];
         const p = packOneLayer(candidate, L, lanesCount, customWeights);
         if (p.ok) {
-          const currentLen = layers[layerIdx].reduce((a, b) => a + b, 0);
+          const currentLen = layers[layerIdx].reduce((a, b) => a + getPackagedLength(b), 0);
           if (currentLen < minLayerLength) {
             minLayerLength = currentLen;
             bestLayerIdx = layerIdx;
@@ -167,7 +176,7 @@ export function splitItemsIntoLayers(
         }
       }
       layers[minIdx].push(item);
-      sums[minIdx] += item;
+      sums[minIdx] += getPackagedLength(item);
     }
   }
 
@@ -867,10 +876,32 @@ export function evaluateTruck(
   }
 
   // Standard Direct/Loose Radiator Packing
-  const lanesCount = Math.floor(truck.W / rowW);
+  const effectiveRowW = (rowW && rowW > 0) ? rowW : 11;
+  const lanesCount = Math.floor(truck.W / effectiveRowW);
   const activeMaxLayers = (manualLayers && manualLayers > 0)
     ? manualLayers
     : Math.max(1, Math.floor(maxH / layerH));
+
+  const maxItemNominal = data.items.length > 0 ? Math.max(...data.items) : 0;
+  const maxItemPackaged = data.items.length > 0 ? Math.max(...data.items.map(getPackagedLength)) : 0;
+  if (maxItemPackaged > truck.L && maxItemPackaged > truck.W) {
+    return {
+      ok: false,
+      reason: `طول بسته‌بندی بزرگترین رادیاتور (${maxItemPackaged} سانتی‌متر شامل ۶ سانتی‌متر بسته‌بندی) از طول (${truck.L}cm) و عرض (${truck.W}cm) اتاق بار ${truck.name} بیشتر است و در بارگیری جا نمی‌شود`,
+      truck,
+      lanesCount: 0,
+      maxLayers: activeMaxLayers,
+      usedLayers: 0,
+      packed: [],
+      fill: 0,
+      reserve: truck.cap - data.totalWeight,
+      approxAxle: data.totalWeight / 2,
+      axleOk: false,
+      axleBalanceScore: 0,
+      frontAxleWeight: 0,
+      rearAxleWeight: 0
+    };
+  }
 
   if (lanesCount < 1 || activeMaxLayers < 1) {
     return {

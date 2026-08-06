@@ -61,6 +61,9 @@ interface WizardCardProps {
   onSignatureChange: (url: string | null) => void;
   getFeatureAccess?: (key: FeatureKey) => FeatureAccess;
   onFinishWizard: () => void;
+  onSelectBestVehicle?: () => void;
+  bestVehicleName?: string;
+  bestVehicleFill?: number;
 }
 
 export const WizardCard: React.FC<WizardCardProps> = ({
@@ -86,6 +89,9 @@ export const WizardCard: React.FC<WizardCardProps> = ({
   onSignatureChange,
   getFeatureAccess = (_key: FeatureKey) => 'active' as FeatureAccess,
   onFinishWizard,
+  onSelectBestVehicle,
+  bestVehicleName,
+  bestVehicleFill,
 }) => {
   const [step, setStep] = useState<number>(1);
   const [showAllCardsInWizard, setShowAllCardsInWizard] = useState<boolean>(false);
@@ -93,10 +99,9 @@ export const WizardCard: React.FC<WizardCardProps> = ({
   const totalPieces = Object.values(counts).reduce((acc: number, curr: number) => acc + (Number(curr) || 0), 0);
 
   const steps = [
-    { num: 1, title: 'تعداد و پالت‌بندی', icon: Box },
-    { num: 2, title: 'مقصد و راننده', icon: MapPin },
-    { num: 3, title: 'خودرو و قوانین چیدمان', icon: Truck },
-    { num: 4, title: 'تأیید و محاسبه n-بعدی', icon: CheckCircle2 },
+    { num: 1, title: '۱. ثبت و تأیید رادیاتورها', icon: Box },
+    { num: 2, title: '۲. پیشنهادیابی و انتخاب ماشین', icon: Truck },
+    { num: 3, title: '۳. الگوی چیدمان ۲بعدی و ۳بعدی', icon: CheckCircle2 },
   ];
 
   return (
@@ -181,6 +186,8 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             customWeights={customWeights}
             onCustomWeightsChange={onCustomWeightsChange}
             access={getFeatureAccess('loading_items')}
+            manualLayers={rules.manualLayers}
+            onManualLayersChange={(layers) => onRulesChange({ ...rules, manualLayers: layers })}
           />
           <PalletConfigCard
             config={palletConfig}
@@ -196,6 +203,9 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             access={getFeatureAccess('manual_vehicle')}
             autoVehicleActive={rules.autoVehicle}
             onManualCustomized={() => onRulesChange({ ...rules, autoVehicle: false })}
+            onSelectBestVehicle={onSelectBestVehicle}
+            bestVehicleName={bestVehicleName}
+            bestVehicleFill={bestVehicleFill}
           />
           <DestinationCard
             info={destinationInfo}
@@ -244,13 +254,13 @@ export const WizardCard: React.FC<WizardCardProps> = ({
         </div>
       ) : (
         <div>
-          {/* STEP 1: QUANTITIES, ORDER IMPORT & PALLET CONFIG */}
+          {/* STEP 1: QUANTITIES, ORDER IMPORT & CONFIRMATION */}
           {step === 1 && (
             <div className="space-y-6">
               <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center justify-between">
                 <span className="flex items-center gap-2 font-semibold">
                   <PackageCheck className="w-4 h-4 text-blue-600" />
-                  گام ۱: مشخص کردن تعداد رادیاتورها، بارگذاری پیش‌فرض‌ها و تنظیمات پالت‌بندی
+                  گام ۱: مشخص کردن تعداد رادیاتورها، محاسبه توناژ و متراژ، و تایید سفارش
                 </span>
                 <span className="font-bold bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-700">
                   مجموع: {toPersianDigits(Number(totalPieces))} عدد
@@ -265,6 +275,9 @@ export const WizardCard: React.FC<WizardCardProps> = ({
                 customWeights={customWeights}
                 onCustomWeightsChange={onCustomWeightsChange}
                 access={getFeatureAccess('loading_items')}
+                onConfirm={() => setStep(2)}
+                manualLayers={rules.manualLayers}
+                onManualLayersChange={(layers) => onRulesChange({ ...rules, manualLayers: layers })}
               />
 
               <PalletConfigCard
@@ -277,54 +290,15 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             </div>
           )}
 
-          {/* STEP 2: DESTINATION, DRIVER & MULTI-STOP LIFO */}
+          {/* STEP 2: VEHICLE SELECTION & RECOMMENDATION BASED ON QUANTITY, METERAGE & TONNAGE */}
           {step === 2 && (
             <div className="space-y-6">
               <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2 font-semibold">
-                <MapPin className="w-4 h-4 text-blue-600" />
-                گام ۲: مشخصات شهر/مقصد، اطلاعات راننده، شماره بارنامه و مقاصد چندگانه (LIFO)
-              </div>
-
-              <DestinationCard
-                info={destinationInfo}
-                onChange={onDestinationInfoChange}
-                access={getFeatureAccess('destination')}
-              />
-
-              <MultiStopCard
-                destinationInfo={destinationInfo}
-                onChange={onDestinationInfoChange}
-                lifoEnabled={rules.lifoPriority}
-                onToggleLifo={(val) => onRulesChange({ ...rules, lifoPriority: val })}
-              />
-            </div>
-          )}
-
-          {/* STEP 3: VEHICLE PRESETS & LAYOUT RULES */}
-          {step === 3 && (
-            <div className="space-y-6">
-              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2 font-semibold">
                 <Truck className="w-4 h-4 text-blue-600" />
-                گام ۳: انتخاب خودرو، تغییر ابعاد، ارتفاع مجاز و قوانین فیزیکی اکسل‌ها
+                گام ۲: پیشنهاد هوشمند و انتخاب ماشین مناسب بر اساس متراژ، توناژ و تعداد رادیاتورها
               </div>
 
-              <VehicleCard
-                details={truckDetails}
-                onChange={onTruckDetailsChange}
-                selectedIndex={selectedTruckIndex}
-                onSelectPreset={onTruckSelect}
-                access={getFeatureAccess('manual_vehicle')}
-                autoVehicleActive={rules.autoVehicle}
-                onManualCustomized={() => onRulesChange({ ...rules, autoVehicle: false })}
-              />
-
-              <LayoutRulesCard
-                rules={rules}
-                onChange={onRulesChange}
-                onRunCalc={onFinishWizard}
-                access={getFeatureAccess('layout_rules')}
-              />
-
+              {/* Automatic Vehicle Recommendation Engine */}
               <VehicleRecommendationCard
                 counts={counts}
                 customWeights={customWeights}
@@ -337,16 +311,63 @@ export const WizardCard: React.FC<WizardCardProps> = ({
                 }}
                 access={getFeatureAccess('manual_vehicle')}
               />
+
+              {/* Vehicle Specs & Manual Adjustments */}
+              <VehicleCard
+                details={truckDetails}
+                onChange={onTruckDetailsChange}
+                selectedIndex={selectedTruckIndex}
+                onSelectPreset={onTruckSelect}
+                access={getFeatureAccess('manual_vehicle')}
+                autoVehicleActive={rules.autoVehicle}
+                onManualCustomized={() => onRulesChange({ ...rules, autoVehicle: false })}
+                onSelectBestVehicle={onSelectBestVehicle}
+                bestVehicleName={bestVehicleName}
+                bestVehicleFill={bestVehicleFill}
+              />
+
+              <DestinationCard
+                info={destinationInfo}
+                onChange={onDestinationInfoChange}
+                access={getFeatureAccess('destination')}
+              />
+
+              {/* Step 2 Confirmation Button to move to 2D/3D Layout */}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(3)}
+                  className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs md:text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>تأیید ماشین و دریافت الگوی چیدمان ۲بعدی و ۳بعدی</span>
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
 
-          {/* STEP 4: FINAL CONFIRMATION, FREIGHT COSTS & EXECUTE */}
-          {step === 4 && (
+          {/* STEP 3: 2D & 3D LAYOUT PATTERN & EXECUTION */}
+          {step === 3 && (
             <div className="space-y-6">
               <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-semibold">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                گام ۴: تأیید نهایی بارگیری، تنظیمات کرایه حمل، عکس/امضا و شروع الگوریتم
+                گام ۳: دریافت الگوی چیدمان ۲بعدی و ۳بعدی، محاسبه توزیع اکسل‌ها و صدور حواله بارگیری
               </div>
+
+              <LayoutRulesCard
+                rules={rules}
+                onChange={onRulesChange}
+                onRunCalc={onFinishWizard}
+                access={getFeatureAccess('layout_rules')}
+              />
+
+              <MultiStopCard
+                destinationInfo={destinationInfo}
+                onChange={onDestinationInfoChange}
+                lifoEnabled={rules.lifoPriority}
+                onToggleLifo={(val) => onRulesChange({ ...rules, lifoPriority: val })}
+              />
 
               {/* Confirmation box */}
               <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -402,10 +423,10 @@ export const WizardCard: React.FC<WizardCardProps> = ({
         </button>
 
         <div className="flex items-center gap-3">
-          {step < 4 && !showAllCardsInWizard ? (
+          {step < 3 && !showAllCardsInWizard ? (
             <button
               type="button"
-              onClick={() => setStep((prev) => Math.min(4, prev + 1))}
+              onClick={() => setStep((prev) => Math.min(3, prev + 1))}
               className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm shadow-blue-200 dark:shadow-none"
             >
               مرحله بعد
@@ -418,7 +439,7 @@ export const WizardCard: React.FC<WizardCardProps> = ({
               className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs md:text-sm flex items-center gap-2 transition shadow-md shadow-emerald-200 dark:shadow-none"
             >
               <Calculator className="w-4 h-4" />
-              محاسبه مجدد چیدمان و ثبت نهایی
+              محاسبه مجدد چیدمان و نمایش الگوی ۳بعدی
             </button>
           )}
         </div>

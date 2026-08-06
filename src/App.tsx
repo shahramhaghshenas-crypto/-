@@ -16,7 +16,12 @@ import {
   FeatureKey,
   SavedLoadingRecord,
   PalletConfig,
-  VehiclePreset
+  VehiclePreset,
+  DashboardTab,
+  DriverRecord,
+  CustomVehicleRecord,
+  LayoutScenario,
+  AuditLogEntry
 } from './types';
 import {
   VEHICLE_PRESETS,
@@ -26,13 +31,22 @@ import {
   DEFAULT_PALLET_CONFIG
 } from './data/presets';
 import { buildRadiatorData, evaluateTruck, getVehicleRecommendations } from './utils/calculation';
-import { clamp } from './utils/persianDigits';
+import { clamp, toPersianDigits } from './utils/persianDigits';
 
 import { Header } from './components/Header';
+import { DashboardNavBar } from './components/DashboardNavBar';
+import { DashboardHome } from './components/DashboardHome';
+import { IndustrialControlSuite } from './components/IndustrialControlSuite';
+import { DriverRegistrationCard } from './components/DriverRegistrationCard';
+import { VehicleRegistrationCard } from './components/VehicleRegistrationCard';
+import { FactoryReportsCard } from './components/FactoryReportsCard';
+import { FactorySettingsCard } from './components/FactorySettingsCard';
+
 import { WizardCard } from './components/WizardCard';
 import { VehicleCard } from './components/VehicleCard';
 import { VehicleRecommendationCard } from './components/VehicleRecommendationCard';
 import { QuantitiesCard } from './components/QuantitiesCard';
+import { RadiatorItemsTable } from './components/RadiatorItemsTable';
 import { PalletConfigCard } from './components/PalletConfigCard';
 import { OrderPresetsImporter } from './components/OrderPresetsImporter';
 import { DestinationCard } from './components/DestinationCard';
@@ -45,15 +59,82 @@ import { PhotosSignatureCard } from './components/PhotosSignatureCard';
 import { PluginsCard } from './components/PluginsCard';
 import { FeatureMatrixCard } from './components/FeatureMatrixCard';
 import { CalculationResultView } from './components/CalculationResultView';
+import { SmartTruckLoadingPlanner } from './components/SmartTruckLoadingPlanner';
 import { HistoryModal } from './components/HistoryModal';
 import { QrScannerModal } from './components/QrScannerModal';
 import { AndroidAppFrame } from './components/AndroidAppFrame';
+import { ToastNotification, ToastMessage } from './components/ToastNotification';
+import { AboutModal } from './components/AboutModal';
+import { Validator } from './utils/validator';
 
 export default function App() {
-  // Profiles & Modes
+  // Profiles & Modes & Navigation Tabs
   const [currentProfile, setCurrentProfile] = useState<UserProfileKey>('manager');
   const [mode, setMode] = useState<AppMode>('pro');
   const [isAndroidView, setIsAndroidView] = useState(false);
+  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
+
+  // Driver Database State
+  const [drivers, setDrivers] = useState<DriverRecord[]>([
+    {
+      id: 'drv-1',
+      firstName: 'علی',
+      lastName: 'محمدی',
+      phone: '09123456789',
+      licenseNo: '9823415678',
+      plate: '78 ع 456 ایران 22',
+      transportCompany: 'همسفر ترابر آریا',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'drv-2',
+      firstName: 'حسین',
+      lastName: 'رضایی',
+      phone: '09351112233',
+      licenseNo: '8876543210',
+      plate: '12 ب 890 ایران 33',
+      transportCompany: 'باربری کارخانه رادیاتور',
+      createdAt: new Date().toISOString()
+    }
+  ]);
+
+  // Custom Vehicles Database State
+  const [customVehicles, setCustomVehicles] = useState<CustomVehicleRecord[]>([]);
+
+  const handleAddDriver = (newDrv: Omit<DriverRecord, 'id' | 'createdAt'>) => {
+    const item: DriverRecord = {
+      ...newDrv,
+      id: 'drv-' + Date.now(),
+      createdAt: new Date().toISOString()
+    };
+    setDrivers(prev => [item, ...prev]);
+  };
+
+  const handleDeleteDriver = (id: string) => {
+    setDrivers(prev => prev.filter(d => d.id !== id));
+  };
+
+  const handleSelectDriverForCurrentLoad = (drv: DriverRecord) => {
+    setTruckDetails(prev => ({
+      ...prev,
+      driverName: `${drv.firstName} ${drv.lastName}`,
+      driverPhone: drv.phone,
+      plate: drv.plate || prev.plate
+    }));
+  };
+
+  const handleAddCustomVehicle = (v: Omit<CustomVehicleRecord, 'id' | 'createdAt'>) => {
+    const item: CustomVehicleRecord = {
+      ...v,
+      id: 'veh-' + Date.now(),
+      createdAt: new Date().toISOString()
+    };
+    setCustomVehicles(prev => [item, ...prev]);
+  };
+
+  const handleDeleteCustomVehicle = (id: string) => {
+    setCustomVehicles(prev => prev.filter(v => v.id !== id));
+  };
 
   // Modals state
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -103,13 +184,13 @@ export default function App() {
   const [rules, setRules] = useState<LayoutRules>({
     maxH: 150,
     manualLayers: 10,
-    rowW: 60,
+    rowW: 11,
     layerH: 11,
     overloadMargin: 0,
     axleLimit: 4500,
     confirmLoading: false,
     autoVehicle: true,
-    show2D: true,
+    show2D: false,
     show3D: true,
     lifoPriority: true
   });
@@ -148,6 +229,171 @@ export default function App() {
   // Calculation Result state
   const [result, setResult] = useState<EvaluationResult | null>(null);
 
+  // Advanced Industrial Controls State (فاز پیشرفته صنعتی)
+  const [isOrderLocked, setIsOrderLocked] = useState<boolean>(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string>(new Date().toLocaleTimeString('fa-IR'));
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState<boolean>(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = useCallback((type: ToastMessage['type'], text: string) => {
+    const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
+    setToasts(prev => [...prev, { id, type, text }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4500);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const [scenarios, setScenarios] = useState<LayoutScenario[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([
+    {
+      id: 'log-1',
+      timestamp: new Date().toLocaleTimeString('fa-IR'),
+      operator: 'شهرام (مدیر)',
+      action: 'راه‌اندازی سیستم چیدمان',
+      details: 'سامانه صنعتی چیدمان بار رادیاتور با موفقیت آماده به کار گردید.',
+      type: 'info'
+    }
+  ]);
+
+  // Undo / Redo State Stack
+  type HistoryState = {
+    counts: RadiatorCounts;
+    truckDetails: TruckDetails;
+    rules: LayoutRules;
+  };
+  const [pastStates, setPastStates] = useState<HistoryState[]>([]);
+  const [futureStates, setFutureStates] = useState<HistoryState[]>([]);
+
+  const addAuditLog = useCallback((action: string, details: string, type: AuditLogEntry['type'] = 'info') => {
+    const newLog: AuditLogEntry = {
+      id: 'log-' + Date.now(),
+      timestamp: new Date().toLocaleTimeString('fa-IR'),
+      operator: currentProfile === 'manager' ? 'شهرام (مدیر)' : 'اپراتور شیفت',
+      action,
+      details,
+      type
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  }, [currentProfile]);
+
+  // Helper to push history snapshot before state update
+  const pushHistorySnapshot = useCallback(() => {
+    setPastStates(prev => [...prev.slice(-20), {
+      counts: { ...counts },
+      truckDetails: { ...truckDetails },
+      rules: { ...rules }
+    }]);
+    setFutureStates([]);
+  }, [counts, truckDetails, rules]);
+
+  // Undo Action
+  const handleUndo = useCallback(() => {
+    if (pastStates.length === 0 || isOrderLocked) return;
+    const previous = pastStates[pastStates.length - 1];
+    const newPast = pastStates.slice(0, pastStates.length - 1);
+
+    setFutureStates(prev => [{ counts: { ...counts }, truckDetails: { ...truckDetails }, rules: { ...rules } }, ...prev]);
+    setPastStates(newPast);
+
+    setCounts(previous.counts);
+    setTruckDetails(previous.truckDetails);
+    setRules(previous.rules);
+    addAuditLog('بازگشت تغییرات (Undo)', 'آخرین تغییر انجام‌شده لغو گردید.', 'edit');
+    addToast('info', '🔵 آخرین تغییر بازگردانی گردید (Undo)');
+  }, [pastStates, counts, truckDetails, rules, isOrderLocked, addAuditLog, addToast]);
+
+  // Redo Action
+  const handleRedo = useCallback(() => {
+    if (futureStates.length === 0 || isOrderLocked) return;
+    const next = futureStates[0];
+    const newFuture = futureStates.slice(1);
+
+    setPastStates(prev => [...prev, { counts: { ...counts }, truckDetails: { ...truckDetails }, rules: { ...rules } }]);
+    setFutureStates(newFuture);
+
+    setCounts(next.counts);
+    setTruckDetails(next.truckDetails);
+    setRules(next.rules);
+    addAuditLog('تکرار تغییرات (Redo)', 'تغییر لغوشده مجدداً اعمال گردید.', 'edit');
+    addToast('info', '🔵 تغییر مجدداً تکرار گردید (Redo)');
+  }, [futureStates, counts, truckDetails, rules, isOrderLocked, addAuditLog, addToast]);
+
+  // Save Scenario
+  const handleSaveCurrentScenario = useCallback((name: string) => {
+    const data = buildRadiatorData(counts, destinationInfo.stops, customWeights);
+    const safeMaxH = clamp(rules.maxH, 11, 350);
+    const manualTruck = {
+      name: truckDetails.model || VEHICLE_PRESETS[selectedTruckIndex].name,
+      L: truckDetails.L,
+      W: truckDetails.W,
+      cap: truckDetails.cap
+    };
+    const ev = evaluateTruck(manualTruck, data, safeMaxH, rules.rowW, rules.layerH, rules.axleLimit, rules.overloadMargin, palletConfig, rules.manualLayers);
+
+    const newScenario: LayoutScenario = {
+      id: 'sc-' + Date.now(),
+      name,
+      createdAt: new Date().toLocaleTimeString('fa-IR'),
+      counts: { ...counts },
+      truckDetails: { ...truckDetails },
+      rules: { ...rules },
+      result: ev,
+      fill: ev.fill || 0,
+      balance: ev.axleBalanceScore || 90,
+      weight: data.totalWeight,
+      totalPieces: data.totalPieces
+    };
+
+    setScenarios(prev => [newScenario, ...prev]);
+    addAuditLog('ثبت سناریو', `سناریوی "${name}" برای کامیون ${truckDetails.model} ذخیره شد.`, 'scenario');
+    addToast('success', `🟢 سناریوی "${name}" با موفقیت ثبت شد.`);
+  }, [counts, destinationInfo.stops, customWeights, rules, truckDetails, selectedTruckIndex, palletConfig, addAuditLog, addToast]);
+
+  const handleDeleteScenario = useCallback((id: string) => {
+    setScenarios(prev => prev.filter(s => s.id !== id));
+    addAuditLog('حذف سناریو', 'یکی از سناریوهای چیدمان حذف گردید.', 'warning');
+    addToast('warning', '🟡 سناریو از لیست حذف شد.');
+  }, [addAuditLog, addToast]);
+
+  const handleApplyScenario = useCallback((sc: LayoutScenario) => {
+    if (isOrderLocked) return;
+    pushHistorySnapshot();
+    setCounts(sc.counts);
+    setTruckDetails(sc.truckDetails);
+    setRules(sc.rules);
+    addAuditLog('اعمال سناریو', `سناریوی "${sc.name}" بارگذاری شد.`, 'edit');
+    addToast('success', `🟢 سناریوی "${sc.name}" بر روی سفارش فعلی اعمال گردید.`);
+  }, [isOrderLocked, pushHistorySnapshot, addAuditLog, addToast]);
+
+  const handleToggleOrderLock = useCallback(() => {
+    const nextLock = !isOrderLocked;
+    setIsOrderLocked(nextLock);
+    addAuditLog(
+      nextLock ? 'قفل سفارش' : 'بازکردن قفل سفارش',
+      nextLock ? 'ویرایش مقادیر جهت بارگیری نهایی قفل شد.' : 'قفل سفارش جهت ویرایش باز گردید.',
+      'lock'
+    );
+    addToast(
+      nextLock ? 'warning' : 'info',
+      nextLock ? '🔒 سفارش جهت بارگیری قفل شد. تغییرات مسدود است.' : '🔓 قفل سفارش باز شد. ویرایش امکان‌پذیر است.'
+    );
+  }, [isOrderLocked, addAuditLog, addToast]);
+
+  // Auto Save status updater trigger on state changes
+  useEffect(() => {
+    setIsSaving(true);
+    const timer = setTimeout(() => {
+      setIsSaving(false);
+      setLastSavedTime(new Date().toLocaleTimeString('fa-IR'));
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [counts, truckDetails, rules, destinationInfo]);
+
   // Active feature access checker based on profile
   const getFeatureAccess = (key: FeatureKey): FeatureAccess => {
     const profileAllowed = PROFILE_FEATURES[currentProfile];
@@ -156,51 +402,84 @@ export default function App() {
   };
 
   // Run Layout Calculation Algorithm
-  const handleRunCalculation = () => {
-    const data = buildRadiatorData(counts, destinationInfo.stops, customWeights);
-    if (data.totalPieces === 0) {
-      setResult(null);
-      return;
-    }
-
-    const safeMaxH = clamp(rules.maxH, 11, 350);
-
-    if (rules.autoVehicle) {
-      const rec = getVehicleRecommendations(
-        data,
-        safeMaxH,
-        rules.rowW,
-        rules.layerH,
-        rules.axleLimit,
-        rules.overloadMargin,
-        palletConfig,
-        rules.manualLayers
-      );
-
-      if (rec.bestResult) {
-        setResult(rec.bestResult);
-        setSelectedTruckIndex(rec.bestPresetIndex);
-        setTruckDetails((prev) => ({
-          ...prev,
-          model: rec.bestResult!.truck.name,
-          L: rec.bestResult!.truck.L,
-          W: rec.bestResult!.truck.W,
-          cap: rec.bestResult!.truck.cap
-        }));
+  const handleRunCalculation = useCallback(() => {
+    try {
+      const data = buildRadiatorData(counts, destinationInfo.stops, customWeights);
+      if (data.totalPieces === 0) {
+        setResult(null);
         return;
       }
+
+      const safeMaxH = clamp(rules.maxH, 11, 350);
+
+      if (rules.autoVehicle) {
+        const rec = getVehicleRecommendations(
+          data,
+          safeMaxH,
+          rules.rowW,
+          rules.layerH,
+          rules.axleLimit,
+          rules.overloadMargin,
+          palletConfig,
+          rules.manualLayers
+        );
+
+        if (rec.bestResult) {
+          setResult(rec.bestResult);
+          if (selectedTruckIndex !== rec.bestPresetIndex) {
+            setSelectedTruckIndex(rec.bestPresetIndex);
+          }
+          const targetModel = rec.bestResult.truck.name;
+          const targetL = rec.bestResult.truck.L;
+          const targetW = rec.bestResult.truck.W;
+          const targetCap = rec.bestResult.truck.cap;
+
+          setTruckDetails((prev) => {
+            if (
+              prev.model === targetModel &&
+              prev.L === targetL &&
+              prev.W === targetW &&
+              prev.cap === targetCap
+            ) {
+              return prev;
+            }
+            return {
+              ...prev,
+              model: targetModel,
+              L: targetL,
+              W: targetW,
+              cap: targetCap
+            };
+          });
+          return;
+        }
+      }
+
+      const presetName = (selectedTruckIndex >= 0 && VEHICLE_PRESETS[selectedTruckIndex])
+        ? VEHICLE_PRESETS[selectedTruckIndex].name
+        : 'خودروی سفارشی';
+
+      const manualTruck = {
+        name: truckDetails.model || presetName,
+        L: truckDetails.L || 600,
+        W: truckDetails.W || 220,
+        cap: truckDetails.cap || 6000
+      };
+
+      const ev = evaluateTruck(manualTruck, data, safeMaxH, rules.rowW, rules.layerH, rules.axleLimit, rules.overloadMargin, palletConfig, rules.manualLayers);
+      setResult(ev);
+    } catch (err) {
+      console.error('Error running calculation:', err);
     }
-
-    const manualTruck = {
-      name: truckDetails.model || VEHICLE_PRESETS[selectedTruckIndex].name,
-      L: truckDetails.L,
-      W: truckDetails.W,
-      cap: truckDetails.cap
-    };
-
-    const ev = evaluateTruck(manualTruck, data, safeMaxH, rules.rowW, rules.layerH, rules.axleLimit, rules.overloadMargin, palletConfig, rules.manualLayers);
-    setResult(ev);
-  };
+  }, [
+    counts,
+    destinationInfo.stops,
+    customWeights,
+    rules,
+    palletConfig,
+    selectedTruckIndex,
+    truckDetails
+  ]);
 
   const handleSelectVehiclePreset = useCallback((index: number, preset: VehiclePreset) => {
     setSelectedTruckIndex(index);
@@ -212,6 +491,58 @@ export default function App() {
       cap: preset.cap
     }));
   }, []);
+
+  const bestVehicleInfo = useMemo(() => {
+    const data = buildRadiatorData(counts, destinationInfo.stops, customWeights);
+    if (data.totalPieces === 0) return null;
+    const safeMaxH = clamp(rules.maxH, 11, 350);
+    const rec = getVehicleRecommendations(
+      data,
+      safeMaxH,
+      rules.rowW,
+      rules.layerH,
+      rules.axleLimit,
+      rules.overloadMargin,
+      palletConfig,
+      rules.manualLayers
+    );
+    if (!rec.bestResult) return null;
+    return {
+      name: rec.bestResult.truck.name,
+      fill: rec.bestResult.fill,
+      index: rec.bestPresetIndex,
+      preset: rec.bestResult.truck
+    };
+  }, [counts, destinationInfo.stops, customWeights, rules, palletConfig]);
+
+  const handleSelectBestVehicle = useCallback(() => {
+    const data = buildRadiatorData(counts, destinationInfo.stops, customWeights);
+    if (data.totalPieces === 0) {
+      addToast('warning', 'لطفاً ابتدا تعداد رادیاتورها را وارد فرمایید.');
+      return;
+    }
+    const safeMaxH = clamp(rules.maxH, 11, 350);
+    const rec = getVehicleRecommendations(
+      data,
+      safeMaxH,
+      rules.rowW,
+      rules.layerH,
+      rules.axleLimit,
+      rules.overloadMargin,
+      palletConfig,
+      rules.manualLayers
+    );
+
+    if (rec.bestResult) {
+      handleSelectVehiclePreset(rec.bestPresetIndex, rec.bestResult.truck);
+      addToast(
+        'success',
+        `🟢 خودروی «${rec.bestResult.truck.name}» با بیشترین ظرفیت پر شوندگی (${toPersianDigits(Math.round(rec.bestResult.fill))}٪) انتخاب گردید.`
+      );
+    } else {
+      addToast('warning', 'با مقادیر فعلی بار، خودروی متناسب یافت نشد.');
+    }
+  }, [counts, destinationInfo.stops, customWeights, rules, palletConfig, handleSelectVehiclePreset, addToast]);
 
   // Stable state updater callbacks to prevent unnecessary child re-renders
   const handleCountsChange = useCallback((newCounts: RadiatorCounts) => {
@@ -270,7 +601,8 @@ export default function App() {
     palletConfig.tareWeight,
     palletConfig.unitPrice,
     palletConfig.radiatorsPerPallet,
-    palletConfig.customPalletCount
+    palletConfig.customPalletCount,
+    handleRunCalculation
   ]);
 
   // Handle Export CSV
@@ -361,9 +693,41 @@ export default function App() {
           onRunCalc={handleRunCalculation}
           onOpenHistory={() => setIsHistoryOpen(true)}
           onOpenScanner={() => setIsScannerOpen(true)}
+          onOpenAbout={() => setIsAboutModalOpen(true)}
           isAndroidView={isAndroidView}
           onToggleAndroidView={setIsAndroidView}
         />
+
+        {/* Phase 3 Bosch & Siemens Industrial Dashboard Navigation Bar */}
+        <DashboardNavBar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
+
+        {/* Industrial Control Suite (Undo/Redo, Auto-save, Order Lock, Scenarios, Audit Log) */}
+        <IndustrialControlSuite
+          canUndo={pastStates.length > 0}
+          canRedo={futureStates.length > 0}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          lastSavedTime={lastSavedTime}
+          isSaving={isSaving}
+          isOrderLocked={isOrderLocked}
+          onToggleOrderLock={handleToggleOrderLock}
+          scenarios={scenarios}
+          onSaveCurrentScenario={handleSaveCurrentScenario}
+          onDeleteScenario={handleDeleteScenario}
+          onApplyScenario={handleApplyScenario}
+          auditLogs={auditLogs}
+          operatorName={profileLabelMap[currentProfile]}
+          counts={counts}
+          truckDetails={truckDetails}
+          rules={rules}
+          result={result}
+          totalPieces={currentData.totalPieces}
+          totalWeight={currentData.totalWeight}
+        />
+
 
         {/* Mode Wizard or Pro Mode Content */}
         {mode === 'wizard' ? (
@@ -392,7 +756,11 @@ export default function App() {
               getFeatureAccess={getFeatureAccess}
               onFinishWizard={() => {
                 handleRunCalculation();
+                setActiveTab('layout');
               }}
+              onSelectBestVehicle={handleSelectBestVehicle}
+              bestVehicleName={bestVehicleInfo?.name}
+              bestVehicleFill={bestVehicleInfo?.fill}
             />
 
             <CalculationResultView
@@ -410,125 +778,230 @@ export default function App() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Step 1: Cargo Quantities & Pallet Packaging */}
-            <OrderPresetsImporter onApplyCounts={setCounts} />
+            {/* TAB 1: DASHBOARD HOME */}
+            {activeTab === 'dashboard' && (
+              <DashboardHome
+                onNavigateTab={setActiveTab}
+                driversCount={drivers.length}
+                activeDriverName={truckDetails.driverName}
+                truckDetails={truckDetails}
+                totalCargoPieces={currentData.totalPieces}
+                result={result}
+                onOpenScanner={() => setIsScannerOpen(true)}
+                onRunCalc={handleRunCalculation}
+              />
+            )}
 
-            <QuantitiesCard
-              counts={counts}
-              onChange={handleCountsChange}
-              customWeights={customWeights}
-              onCustomWeightsChange={handleCustomWeightsChange}
-              access={getFeatureAccess('loading_items')}
-            />
+            {/* TAB 2: DRIVER REGISTRATION (فاز ۲: ثبت راننده) */}
+            {activeTab === 'drivers' && (
+              <DriverRegistrationCard
+                drivers={drivers}
+                onAddDriver={handleAddDriver}
+                onDeleteDriver={handleDeleteDriver}
+                onSelectDriverForCurrentLoad={handleSelectDriverForCurrentLoad}
+                currentTruckDetails={truckDetails}
+                onUpdateTruckDetails={setTruckDetails}
+              />
+            )}
 
-            <PalletConfigCard
-              config={palletConfig}
-              onChange={handlePalletConfigChange}
-              totalRadiators={currentData.totalPieces}
-              radiatorCounts={counts}
-              access={getFeatureAccess('pallets')}
-              onSyncCounts={(newCounts) => setCounts(newCounts)}
-            />
+            {/* TAB 3: VEHICLE REGISTRATION (فاز ۲: ثبت خودرو) */}
+            {activeTab === 'vehicles' && (
+              <>
+                <VehicleRegistrationCard
+                  customVehicles={customVehicles}
+                  onAddVehicle={handleAddCustomVehicle}
+                  onDeleteVehicle={handleDeleteCustomVehicle}
+                  onSelectVehicleForCurrentLoad={(v) => {
+                    setTruckDetails({
+                      ...truckDetails,
+                      model: v.model,
+                      cap: v.cap,
+                      L: v.L,
+                      W: v.W,
+                      plate: v.plate || truckDetails.plate
+                    });
+                  }}
+                  currentTruckDetails={truckDetails}
+                  onUpdateTruckDetails={setTruckDetails}
+                />
 
-            {/* Step 2: Vehicle Selection & Truck Capacity */}
-            <VehicleCard
-              details={truckDetails}
-              onChange={setTruckDetails}
-              selectedIndex={selectedTruckIndex}
-              onSelectPreset={setSelectedTruckIndex}
-              access={getFeatureAccess('manual_vehicle')}
-              onManualCustomized={() => setRules((r) => ({ ...r, autoVehicle: false }))}
-              autoVehicleActive={rules.autoVehicle}
-            />
+                <VehicleCard
+                  details={truckDetails}
+                  onChange={setTruckDetails}
+                  selectedIndex={selectedTruckIndex}
+                  onSelectPreset={setSelectedTruckIndex}
+                  access={getFeatureAccess('manual_vehicle')}
+                  onManualCustomized={() => setRules((r) => ({ ...r, autoVehicle: false }))}
+                  autoVehicleActive={rules.autoVehicle}
+                  onSelectBestVehicle={handleSelectBestVehicle}
+                  bestVehicleName={bestVehicleInfo?.name}
+                  bestVehicleFill={bestVehicleInfo?.fill}
+                />
 
-            {/* Step 3: Destination, Timing & Multi-Stop LIFO */}
-            <DestinationCard
-              info={destinationInfo}
-              onChange={setDestinationInfo}
-              access={getFeatureAccess('destination')}
-            />
+                <VehicleRecommendationCard
+                  counts={counts}
+                  customWeights={customWeights}
+                  rules={rules}
+                  palletConfig={palletConfig}
+                  selectedTruckIndex={selectedTruckIndex}
+                  onSelectVehiclePreset={handleSelectVehiclePreset}
+                  access={getFeatureAccess('manual_vehicle')}
+                />
+              </>
+            )}
 
-            <MultiStopCard
-              destinationInfo={destinationInfo}
-              onChange={setDestinationInfo}
-              lifoEnabled={rules.lifoPriority}
-              onToggleLifo={(val) => setRules({ ...rules, lifoPriority: val })}
-            />
+            {/* TAB 4: CARGO REGISTRATION (فاز ۳: ثبت بار و مقادیر) */}
+            {activeTab === 'cargo' && (
+              <>
+                <OrderPresetsImporter onApplyCounts={setCounts} />
 
-            {/* Step 4: Layout Rules & Axle Constraints */}
-            <LayoutRulesCard
-              rules={rules}
-              onChange={setRules}
-              onRunCalc={handleRunCalculation}
-              access={getFeatureAccess('layout_rules')}
-            />
+                <QuantitiesCard
+                  counts={counts}
+                  onChange={handleCountsChange}
+                  customWeights={customWeights}
+                  onCustomWeightsChange={handleCustomWeightsChange}
+                  access={getFeatureAccess('loading_items')}
+                  manualLayers={rules.manualLayers}
+                  onManualLayersChange={(layers) => setRules((prev) => ({ ...prev, manualLayers: layers }))}
+                />
 
-            {/* Smart Vehicle Recommendation & Fill Matrix */}
-            <VehicleRecommendationCard
-              counts={counts}
-              customWeights={customWeights}
-              rules={rules}
-              palletConfig={palletConfig}
-              selectedTruckIndex={selectedTruckIndex}
-              onSelectVehiclePreset={handleSelectVehiclePreset}
-              access={getFeatureAccess('manual_vehicle')}
-            />
+                <RadiatorItemsTable
+                  counts={counts}
+                  onChangeCounts={handleCountsChange}
+                  truckDetails={truckDetails}
+                  onTruckChange={setTruckDetails}
+                  result={result}
+                  onRunCalculation={handleRunCalculation}
+                  onOpen3DViewer={() => setActiveTab('layout')}
+                  onExportPdf={handlePrint}
+                  onExportExcel={handleExportCSV}
+                  manualLayers={rules.manualLayers}
+                  onManualLayersChange={(layers) => setRules((prev) => ({ ...prev, manualLayers: layers }))}
+                  onSaveOrder={() => {
+                    addAuditLog('ذخیره سفارش', 'اطلاعات سفارش و جدول رادیاتورها با موفقیت ذخیره گردید.', 'info');
+                    addToast('success', '🟢 سفارش و لیست رادیاتورها با موفقیت ذخیره گردید.');
+                  }}
+                />
 
-            {/* Step 5: Complete Loading Calculation & 3D Visualizer */}
-            <CalculationResultView
-              result={result}
-              data={currentData}
-              truckDetails={truckDetails}
-              destinationInfo={destinationInfo}
-              rules={rules}
-              shippingCost={shippingCostInfo.totalCost}
-              profileName={profileLabelMap[currentProfile]}
-              appModeName={mode === 'pro' ? 'حرفه‌ای' : 'Wizard'}
-              photoUrl={photoUrl}
-              signatureUrl={signatureUrl}
-            />
+                <PalletConfigCard
+                  config={palletConfig}
+                  onChange={handlePalletConfigChange}
+                  totalRadiators={currentData.totalPieces}
+                  radiatorCounts={counts}
+                  access={getFeatureAccess('pallets')}
+                  onSyncCounts={(newCounts) => setCounts(newCounts)}
+                />
 
-            {/* Step 6: Freight & Shipping Costs */}
-            <ShippingCostCard
-              costInfo={shippingCostInfo}
-              palletTotalCost={activePalletCost}
-              usePallets={palletConfig.usePallets}
-              palletCount={activePalletCount}
-              onChange={setShippingCostInfo}
-              access={getFeatureAccess('cost')}
-            />
+                <DestinationCard
+                  info={destinationInfo}
+                  onChange={setDestinationInfo}
+                  access={getFeatureAccess('destination')}
+                />
 
-            {/* Step 7: Route Map & Center of Gravity GPS */}
-            <GpsMapCard
-              info={gpsInfo}
-              onChange={setGpsInfo}
-              destination={destinationInfo.destination}
-              truckL={truckDetails.L}
-              truckW={truckDetails.W}
-              access={getFeatureAccess('map_gps')}
-            />
+                <MultiStopCard
+                  destinationInfo={destinationInfo}
+                  onChange={setDestinationInfo}
+                  lifoEnabled={rules.lifoPriority}
+                  onToggleLifo={(val) => setRules({ ...rules, lifoPriority: val })}
+                />
+              </>
+            )}
 
-            {/* Step 8: Proof of Loading - Photos & Digital Signature */}
-            <PhotosSignatureCard
-              access={getFeatureAccess('photos_sign')}
-              photoUrl={photoUrl}
-              onPhotoChange={setPhotoUrl}
-              signatureUrl={signatureUrl}
-              onSignatureChange={setSignatureUrl}
-            />
+            {/* TAB 5: SMART LOADING & 3D LAYOUT (فاز ۴، ۵، ۶: چیدمان هوشمند و ۳بعدی) */}
+            {activeTab === 'layout' && (
+              <>
+                <SmartTruckLoadingPlanner
+                  currentCounts={counts}
+                  currentTruckDetails={truckDetails}
+                  evalResult={result}
+                  onApplyCountsToOrder={(newCounts) => setCounts(newCounts)}
+                  addToast={addToast}
+                />
 
-            {/* Step 9: System Plugins & Access Permission Matrix */}
-            <PluginsCard
-              plugins={plugins}
-              onTogglePlugin={handleTogglePlugin}
-              access={getFeatureAccess('plugins')}
-            />
+                <LayoutRulesCard
+                  rules={rules}
+                  onChange={setRules}
+                  onRunCalc={handleRunCalculation}
+                  access={getFeatureAccess('layout_rules')}
+                />
 
-            <FeatureMatrixCard
-              accessMatrix={accessMatrix}
-              onAccessChange={handleAccessChange}
-              access={getFeatureAccess('features')}
-            />
+                <CalculationResultView
+                  result={result}
+                  data={currentData}
+                  truckDetails={truckDetails}
+                  destinationInfo={destinationInfo}
+                  rules={rules}
+                  shippingCost={shippingCostInfo.totalCost}
+                  profileName={profileLabelMap[currentProfile]}
+                  appModeName={mode === 'pro' ? 'حرفه‌ای' : 'Wizard'}
+                  photoUrl={photoUrl}
+                  signatureUrl={signatureUrl}
+                />
+
+                <GpsMapCard
+                  info={gpsInfo}
+                  onChange={setGpsInfo}
+                  destination={destinationInfo.destination}
+                  truckL={truckDetails.L}
+                  truckW={truckDetails.W}
+                  access={getFeatureAccess('map_gps')}
+                />
+              </>
+            )}
+
+            {/* TAB 6: REPORTS & EXCEL/PDF (فاز ۷: خروجی PDF و Excel) */}
+            {activeTab === 'reports' && (
+              <>
+                <FactoryReportsCard
+                  result={result}
+                  truckDetails={truckDetails}
+                  totalPieces={currentData.totalPieces}
+                  onPrint={handlePrint}
+                  onExportCSV={handleExportCSV}
+                />
+
+                <ShippingCostCard
+                  costInfo={shippingCostInfo}
+                  palletTotalCost={activePalletCost}
+                  usePallets={palletConfig.usePallets}
+                  palletCount={activePalletCount}
+                  onChange={setShippingCostInfo}
+                  access={getFeatureAccess('cost')}
+                />
+
+                <PhotosSignatureCard
+                  access={getFeatureAccess('photos_sign')}
+                  photoUrl={photoUrl}
+                  onPhotoChange={setPhotoUrl}
+                  signatureUrl={signatureUrl}
+                  onSignatureChange={setSignatureUrl}
+                />
+              </>
+            )}
+
+            {/* TAB 7: SETTINGS & FACTORY ERP (فاز ۸، ۹، ۱۰: نسخه کارخانه و تنظیمات) */}
+            {activeTab === 'settings' && (
+              <>
+                <FactorySettingsCard
+                  currentProfile={currentProfile}
+                  onProfileChange={setCurrentProfile}
+                  onOpenScanner={() => setIsScannerOpen(true)}
+                  onOpenHistory={() => setIsHistoryOpen(true)}
+                />
+
+                <PluginsCard
+                  plugins={plugins}
+                  onTogglePlugin={handleTogglePlugin}
+                  access={getFeatureAccess('plugins')}
+                />
+
+                <FeatureMatrixCard
+                  accessMatrix={accessMatrix}
+                  onAccessChange={handleAccessChange}
+                  access={getFeatureAccess('features')}
+                />
+              </>
+            )}
           </div>
         )}
 
@@ -551,6 +1024,18 @@ export default function App() {
           onClose={() => setIsScannerOpen(false)}
           result={result}
           totalPieces={currentData.totalPieces}
+        />
+
+        {/* About Radiator-AI & Industrial Roadmap Modal */}
+        <AboutModal
+          isOpen={isAboutModalOpen}
+          onClose={() => setIsAboutModalOpen(false)}
+        />
+
+        {/* Live Industrial Toast Notifications System */}
+        <ToastNotification
+          toasts={toasts}
+          onDismiss={dismissToast}
         />
       </div>
     </AndroidAppFrame>

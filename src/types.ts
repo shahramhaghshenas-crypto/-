@@ -43,6 +43,30 @@ export interface PalletConfig {
   perSizeSpecs?: Record<number, SizePalletSpec>; // Custom pallet dimensions for each radiator size (60, 80, 100, 120, 140, 160, 180)
 }
 
+export interface DriverRecord {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  licenseNo: string;
+  plate: string;
+  transportCompany: string;
+  createdAt: string;
+}
+
+export interface CustomVehicleRecord {
+  id: string;
+  model: string;
+  cap: number; // weight capacity in kg
+  L: number; // cargo length cm
+  W: number; // cargo width cm
+  height: number; // cargo height cm
+  plate: string;
+  createdAt?: string;
+}
+
+export type DashboardTab = 'dashboard' | 'drivers' | 'vehicles' | 'cargo' | 'layout' | 'reports' | 'settings';
+
 export interface VehiclePreset {
   name: string;
   L: number; // Length in cm
@@ -248,3 +272,86 @@ export interface SavedLoadingRecord {
   truckDetails: TruckDetails;
   destinationInfo: DestinationInfo;
 }
+
+export interface LayoutScenario {
+  id: string;
+  name: string;
+  createdAt: string;
+  counts: RadiatorCounts;
+  truckDetails: TruckDetails;
+  rules: LayoutRules;
+  result: EvaluationResult | null;
+  fill: number;
+  balance: number;
+  weight: number;
+  totalPieces: number;
+  notes?: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  operator: string;
+  action: string;
+  details: string;
+  type: 'info' | 'warning' | 'lock' | 'edit' | 'scenario';
+}
+
+export interface SmartTruckPreset {
+  id: string;
+  name: string;
+  type: 'nissan' | 'pickup' | 'truck6m' | 'truck8m' | 'wheel10' | 'trailer';
+  L: number; // Length cm
+  W: number; // Width cm
+  H: number; // Height cm
+  cap: number; // Max payload kg
+  icon?: string;
+}
+
+export interface PlacedRadiatorItem {
+  id: string;
+  model: string;
+  width: number; // Width in cm along X axis
+  length: number; // Length in cm along Y axis
+  height: number; // Height in cm along Z axis
+  thickness?: number; // Thickness in cm
+  weight: number; // Weight in kg
+  color: string; // Hex color representation
+  x: number; // X offset in truck bed (cm)
+  y: number; // Y offset in truck bed (cm)
+  z: number; // Z stack height (cm)
+  layer: number; // Layer index (1..N)
+  sequence?: number; // Smart Loading Sequence order (1..N)
+  rotated?: boolean; // 90 degree rotation flag
+  orientation?: 'flat' | 'vertical_knife' | 'side'; // Orientation mode
+  rotationAngle?: 0 | 90 | 180; // Rotation angle
+  stopId?: string; // Target stop destination if applicable
+  isPallet?: boolean;
+}
+
+export type LoadingPatternMode = 'flat' | 'vertical_knife' | 'side_loading' | 'interlocking' | 'brick_zigzag' | 'hybrid_maxrects';
+
+export interface OptimizationMetrics {
+  spaceUtilizationPercent: number; // e.g. 96
+  deadSpacePercent: number; // e.g. 3
+  weightBalanceScore: number; // e.g. 98
+  loadingEfficiencyScore: number; // e.g. 97
+  selectedPattern: LoadingPatternMode;
+  selectedPatternLabel: string;
+  totalPacked: number;
+  totalRequested: number;
+  explanationLogs: string[];
+}
+
+export interface SavedSmartLayout {
+  id: string;
+  name: string;
+  createdAt: string;
+  truck: SmartTruckPreset;
+  items: PlacedRadiatorItem[];
+  totalWeight: number;
+  totalPieces: number;
+  fillPercent: number;
+  notes?: string;
+}
+

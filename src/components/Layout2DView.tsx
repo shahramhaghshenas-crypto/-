@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { EvaluationResult } from '../types';
 import { toPersianDigits, fmtPersian } from '../utils/persianDigits';
-import { pieceWeight } from '../utils/calculation';
+import { pieceWeight, getPackagedLength } from '../utils/calculation';
 import { Scale, Info } from 'lucide-react';
 
 interface Layout2DViewProps {
@@ -19,7 +19,21 @@ const SIZE_COLORS: Record<number, { bg: string; text: string; border: string }> 
 };
 
 export const Layout2DView: React.FC<Layout2DViewProps> = React.memo(({ result }) => {
-  const { packed, truck, maxLayers, lanesCount, frontAxleWeight, rearAxleWeight, axleBalanceScore } = result;
+  if (!result || !result.ok) {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 font-bold text-sm my-6">
+        اطلاعات چیدمان دو بعدی در دسترس نیست.
+      </div>
+    );
+  }
+
+  const packed = result.packed || [];
+  const truck = result.truck || { L: 470, W: 220, H: 220, maxW: 4000 };
+  const maxLayers = result.maxLayers || 1;
+  const lanesCount = result.lanesCount || 1;
+  const frontAxleWeight = result.frontAxleWeight || 0;
+  const rearAxleWeight = result.rearAxleWeight || 0;
+  const axleBalanceScore = result.axleBalanceScore || 95;
   const [selectedPiece, setSelectedPiece] = useState<{ len: number; weight: number; layer: number; row: number } | null>(null);
 
   const totalW = (frontAxleWeight || 0) + (rearAxleWeight || 0);
@@ -144,7 +158,8 @@ export const Layout2DView: React.FC<Layout2DViewProps> = React.memo(({ result })
                     <div className="w-full h-10 bg-slate-900 rounded-md border border-slate-700 p-1 flex items-center gap-1 overflow-x-auto relative">
                       {lane.list.length > 0 ? (
                         lane.list.map((itemLen, idx) => {
-                          const widthPct = (itemLen / truck.L) * 100;
+                          const packagedL = getPackagedLength(itemLen);
+                          const widthPct = (packagedL / truck.L) * 100;
                           const color = SIZE_COLORS[itemLen] || SIZE_COLORS[100];
                           const w = pieceWeight(itemLen);
                           return (
@@ -152,7 +167,7 @@ export const Layout2DView: React.FC<Layout2DViewProps> = React.memo(({ result })
                               key={idx}
                               style={{ width: `${widthPct}%` }}
                               onClick={() => setSelectedPiece({ len: itemLen, weight: w, layer: li + 1, row: ri + 1 })}
-                              title={`برای جزئیات کلیک کنید: رادیاتور ${itemLen}cm (${fmtPersian(w, 1)}kg)`}
+                              title={`برای جزئیات کلیک کنید: رادیاتور ${itemLen}cm (بسته‌بندی ${packagedL}cm) | وزن: ${fmtPersian(w, 1)}kg`}
                               className={`h-full ${color.bg} ${color.text} border ${color.border} rounded font-bold text-[11px] flex items-center justify-center shrink-0 transition hover:brightness-125 hover:scale-105 shadow-xs cursor-pointer`}
                             >
                               <span>{toPersianDigits(itemLen)}cm</span>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Truck, Sparkles, Layers, FileSpreadsheet, Printer, ShieldCheck, History, QrCode, Smartphone } from 'lucide-react';
+import { Truck, Sparkles, Layers, FileSpreadsheet, Printer, ShieldCheck, History, QrCode, Smartphone, Info } from 'lucide-react';
 import { AppMode, UserProfileKey } from '../types';
 
 interface HeaderProps {
@@ -12,6 +12,7 @@ interface HeaderProps {
   onRunCalc: () => void;
   onOpenHistory: () => void;
   onOpenScanner: () => void;
+  onOpenAbout?: () => void;
   isAndroidView?: boolean;
   onToggleAndroidView?: (v: boolean) => void;
 }
@@ -33,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRunCalc,
   onOpenHistory,
   onOpenScanner,
+  onOpenAbout,
   isAndroidView = false,
   onToggleAndroidView
 }) => {
@@ -41,12 +43,12 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         {/* Main Title & Branding with App Logo */}
         <div className="flex items-center gap-3.5">
-          <div className="relative w-14 h-14 rounded-2xl overflow-hidden border-2 border-indigo-500/40 shadow-md shadow-indigo-100 dark:shadow-none shrink-0 bg-slate-900 group">
+          <div className="relative w-14 h-14 shrink-0 group">
             <img
               src="/icon-192.png"
               alt="لوگوی سامانه هوشمند بارگیری رادیاتور (ThermoLink)"
               referrerPolicy="no-referrer"
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-sm"
               onError={(e) => {
                 // If image fails to load, replace parent inner HTML with icon
                 (e.target as HTMLElement).style.display = 'none';
@@ -112,6 +114,16 @@ export const Header: React.FC<HeaderProps> = ({
             <History className="w-4 h-4" />
             <span>آرشیو</span>
           </button>
+          {onOpenAbout && (
+            <button
+              onClick={onOpenAbout}
+              className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs md:text-sm transition flex items-center gap-1.5 border border-slate-300 dark:border-slate-700"
+              title="درباره سامانه و راهنمای نسخه 1.0"
+            >
+              <Info className="w-4 h-4 text-blue-500" />
+              <span>درباره برنامه</span>
+            </button>
+          )}
           <button
             onClick={onPrint}
             className="px-3.5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl text-xs md:text-sm transition flex items-center gap-1.5"

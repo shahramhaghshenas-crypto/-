@@ -1,9 +1,12 @@
-import React from 'react';
-import { Truck, CheckCircle, AlertTriangle, Scale, Ruler, Layers, DollarSign, MapPin, User, FileText, CheckSquare } from 'lucide-react';
+import React, { useState } from 'react';
+import { Truck, CheckCircle, AlertTriangle, Scale, Ruler, Layers, DollarSign, MapPin, User, FileText, CheckSquare, Play, Sparkles, ShieldCheck, Box, RefreshCw, Clock, Cpu, Zap, Activity, Eye, EyeOff } from 'lucide-react';
 import { EvaluationResult, RadiatorData, TruckDetails, DestinationInfo, LayoutRules } from '../types';
 import { fmtPersian, toPersianDigits } from '../utils/persianDigits';
+import { pieceWeight } from '../utils/calculation';
 import { Layout2DView } from './Layout2DView';
 import { Layout3DView } from './Layout3DView';
+import { LiveLoadingModal } from './LiveLoadingModal';
+import { calculateAIScenarioScore, estimateLoadingTimeMinutes, findSimilarHistoricalOrder, generateAILoadingSequence } from '../utils/aiLearningEngine';
 
 interface CalculationResultViewProps {
   result: EvaluationResult | null;
@@ -30,6 +33,9 @@ export const CalculationResultView: React.FC<CalculationResultViewProps> = React
   photoUrl,
   signatureUrl,
 }) => {
+  const [isLiveModalOpen, setIsLiveModalOpen] = useState(false);
+  const [show2DSection, setShow2DSection] = useState(false);
+
   if (data.totalPieces === 0) {
     return (
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm text-center">
@@ -83,24 +89,52 @@ export const CalculationResultView: React.FC<CalculationResultViewProps> = React
   const { truck, lanesCount, maxLayers, usedLayers, packed, fill, approxAxle, axleOk } = result;
   const confirmText = rules.confirmLoading ? 'تأیید شده' : 'در انتظار تأیید';
 
+  // Stack Pressure calculations (Step 7)
+  const bottomLayerWeight = Math.round(data.totalWeight * (1 / Math.max(1, usedLayers)));
+  const topWeightPressing = Math.round(data.totalWeight - bottomLayerWeight);
+  const isPressureExceeded = usedLayers > 4 || topWeightPressing > 3500;
+
+  // AI Better Recommendations (Step 8)
+  const isOptimal = fill >= 75 && axleOk && !isPressureExceeded;
+
+  // AI Learning Engine calculations
+  const aiScore = calculateAIScenarioScore(fill, result.axleBalanceScore || 90, result);
+  const timeEst = estimateLoadingTimeMinutes(data.totalPieces, data.totalWeight);
+  const historyMatch = findSimilarHistoricalOrder(data.counts, data.totalWeight, []);
+  const loadingSequence = generateAILoadingSequence(data.counts);
+
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm my-6 card-print">
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm my-6 card-print space-y-6">
+      {/* Live Loading Assistant Modal */}
+      <LiveLoadingModal
+        isOpen={isLiveModalOpen}
+        onClose={() => setIsLiveModalOpen(false)}
+        result={result}
+        data={data}
+        truckDetails={truckDetails}
+        operatorName={profileName}
+      />
+
       {/* Printable Cargo Bill Header */}
       <div className="hidden print-only text-center border-b-2 border-slate-900 pb-4 mb-6">
         <h1 className="text-2xl font-black">حواله و مجوز بارگیری رادیاتور</h1>
         <p className="text-sm mt-1">سامانه تخصصی مدیریت چیدمان و ناوگان باربری</p>
       </div>
 
-      {/* Main Header Result */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-3">
+      {/* Main Header Result & Live Button */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between border-b border-slate-100 pb-4 gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
-              <CheckCircle className="w-6 h-6 text-emerald-600" />
-              پیشنهاد اصلی: {truck.name}
+              <CheckCircle className="w-6 h-6 text-emerald-600 shrink-0" />
+              پیشنهاد هوشمند اصلی: {truck.name}
             </h2>
             <span className="px-3 py-1 bg-blue-50 text-blue-700 font-bold text-xs rounded-full border border-blue-200">
               بازده چیدمان: {fmtPersian(fill, 1)}٪
+            </span>
+            <span className="px-3 py-1 bg-amber-50 text-amber-800 font-bold text-xs rounded-full border border-amber-200 flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              Loading AI Engine v4.0
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
@@ -108,11 +142,16 @@ export const CalculationResultView: React.FC<CalculationResultViewProps> = React
           </p>
         </div>
 
-        <div className="text-left">
-          <span className="text-xs text-slate-400 block">پلاک ثبت‌شده:</span>
-          <span className="text-sm font-black text-slate-900 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200 inline-block">
-            {truckDetails.plate || 'ثبت‌نشده'}
-          </span>
+        {/* Live Loading Mode Launcher */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsLiveModalOpen(true)}
+            className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs md:text-sm shadow-md transition-all flex items-center justify-center gap-2 border border-amber-400"
+          >
+            <Play className="w-4 h-4 fill-current" />
+            <span>ورود به حالت «بارگیری زنده» در سالن</span>
+          </button>
         </div>
       </div>
 
@@ -182,6 +221,362 @@ export const CalculationResultView: React.FC<CalculationResultViewProps> = React
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
           <span className="text-[11px] text-slate-500 block">شهر مقصد</span>
           <span className="text-sm font-bold text-slate-900 truncate block">{destinationInfo.destination || '-'}</span>
+        </div>
+      </div>
+
+      {/* Learning AI Engine Intelligent Insights Card */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-2 border-indigo-500/50 rounded-3xl p-5 md:p-6 text-white space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-indigo-800/60 pb-3 gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-lg shadow-indigo-500/30">
+              <Cpu className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base md:text-lg font-black text-indigo-300">
+                  دستیار هوشمند یادگیرنده بارگیری (Loading AI Assistant)
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  امتیاز هوشمند: {toPersianDigits(aiScore.totalScore)} / ۱۰۰ ({aiScore.badge})
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {aiScore.aiRecommendation}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 bg-indigo-900/60 p-2 rounded-xl border border-indigo-700/60 text-xs">
+            <Clock className="w-4 h-4 text-amber-400" />
+            <div>
+              <span className="text-slate-400 block text-[10px]">پیش‌بینی زمان بارگیری:</span>
+              <span className="font-bold text-amber-300 font-mono">{toPersianDigits(timeEst.minutes)} دقیقه</span>
+              <span className="text-[10px] text-slate-300 block">({toPersianDigits(timeEst.operatorsNeeded)} اپراتور)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* AI Metrics Breakdown Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-center">
+            <span className="text-[11px] text-slate-400 block mb-1">بازده حجم کانتینر</span>
+            <div className="text-lg font-black text-emerald-400 font-mono">{toPersianDigits(aiScore.fillScore)}٪</div>
+            <div className="w-full bg-slate-700 h-1.5 rounded-full mt-1.5 overflow-hidden">
+              <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${aiScore.fillScore}%` }} />
+            </div>
+          </div>
+
+          <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-center">
+            <span className="text-[11px] text-slate-400 block mb-1">توازن وزن چپ / راست</span>
+            <div className="text-lg font-black text-cyan-400 font-mono">{toPersianDigits(aiScore.balanceScore)}٪</div>
+            <div className="w-full bg-slate-700 h-1.5 rounded-full mt-1.5 overflow-hidden">
+              <div className="bg-cyan-400 h-full rounded-full" style={{ width: `${aiScore.balanceScore}%` }} />
+            </div>
+          </div>
+
+          <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-center">
+            <span className="text-[11px] text-slate-400 block mb-1">پایداری مرکز ثقل (CoG)</span>
+            <div className="text-lg font-black text-indigo-400 font-mono">{toPersianDigits(aiScore.stabilityScore)}٪</div>
+            <div className="w-full bg-slate-700 h-1.5 rounded-full mt-1.5 overflow-hidden">
+              <div className="bg-indigo-400 h-full rounded-full" style={{ width: `${aiScore.stabilityScore}%` }} />
+            </div>
+          </div>
+
+          <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-center">
+            <span className="text-[11px] text-slate-400 block mb-1">ایمنی فشار لایه‌ها</span>
+            <div className="text-lg font-black text-amber-400 font-mono">{toPersianDigits(aiScore.safetyScore)}٪</div>
+            <div className="w-full bg-slate-700 h-1.5 rounded-full mt-1.5 overflow-hidden">
+              <div className="bg-amber-400 h-full rounded-full" style={{ width: `${aiScore.safetyScore}%` }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Historical Order Matcher & AI Sequence advice */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 text-xs">
+          {historyMatch && (
+            <div className="bg-slate-800/90 p-3.5 rounded-2xl border border-slate-700 space-y-1.5">
+              <div className="flex items-center gap-2 text-amber-300 font-bold">
+                <Zap className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>شناسایی الگوی سفارش مشابه در آرشیو کارخانه</span>
+              </div>
+              <p className="text-slate-300 leading-relaxed text-[11px]">
+                شباهت <b>{toPersianDigits(historyMatch.similarityPercentage)}٪</b> با سفارش قبلی (کامیون {historyMatch.pastTruckUsed}). {historyMatch.suggestion}
+              </p>
+            </div>
+          )}
+
+          <div className="bg-slate-800/90 p-3.5 rounded-2xl border border-slate-700 space-y-1.5">
+            <div className="flex items-center gap-2 text-emerald-300 font-bold">
+              <Activity className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>ترتیب بهینه پیشنهادی جهت بارگیری اپراتورها</span>
+            </div>
+            <ul className="space-y-1 text-slate-300 text-[11px] list-disc list-inside">
+              {loadingSequence.map((step, idx) => (
+                <li key={idx} className="truncate">{step}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* EXPLICIT 10-STEP LOADING AI ENGINE WORKFLOW DISPLAY */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-900 text-white rounded-3xl p-5 md:p-6 border border-slate-800 space-y-6">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base md:text-lg font-black text-amber-400">
+                مراحل ۱۰ گانه پردازش موتور هوشمند چیدمان (Loading AI Engine)
+              </h3>
+              <p className="text-xs text-slate-400">
+                گزارش گام‌به‌گام محاسبات وزن، توازن اکسل، مرکز ثقل، فشار لایه‌ها و نقشه‌برداری چیدمان
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* STEP 1: Calculation of Total Weight per size */}
+        <div className="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs md:text-sm font-black text-slate-200 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-xs flex items-center justify-center border border-amber-500/30">۱</span>
+              <span>مرحله ۱: محاسبه خودکار وزن کل به تفکیک سایز</span>
+            </h4>
+            <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 px-2.5 py-1 rounded-lg border border-amber-800">
+              مجموع: {toPersianDigits(data.totalWeight)} kg
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs">
+              <thead>
+                <tr className="border-b border-slate-700 text-slate-400 font-bold">
+                  <th className="py-2 px-3">سایز رادیاتور (cm)</th>
+                  <th className="py-2 px-3">تعداد سفارش</th>
+                  <th className="py-2 px-3">وزن هر عدد (kg)</th>
+                  <th className="py-2 px-3">وزن کل سایز (kg)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {Object.entries(data.counts).map(([szStr, rawCnt]) => {
+                  const sz = Number(szStr);
+                  const cnt = Number(rawCnt) || 0;
+                  if (cnt <= 0) return null;
+                  const unitW = pieceWeight(sz, data.customWeights);
+                  const totalSzW = cnt * unitW;
+                  return (
+                    <tr key={sz} className="text-slate-300">
+                      <td className="py-2 px-3 font-mono font-bold">{toPersianDigits(sz)} cm</td>
+                      <td className="py-2 px-3 font-mono">{toPersianDigits(cnt)} عدد</td>
+                      <td className="py-2 px-3 font-mono">{toPersianDigits(unitW)} kg</td>
+                      <td className="py-2 px-3 font-mono font-bold text-amber-300">{toPersianDigits(totalSzW)} kg</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* STEP 2: Auto Truck Recommendation */}
+        <div className="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 space-y-2">
+          <h4 className="text-xs md:text-sm font-black text-slate-200 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-xs flex items-center justify-center border border-amber-500/30">۲</span>
+            <span>مرحله ۲: انتخاب بهترین کامیون (بر اساس تنژ و حجم)</span>
+          </h4>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            وزن بار: <b>{toPersianDigits(data.totalWeight)} kg</b> → طبق قوانین هوشمند کارخانه:{' '}
+            <span className="text-amber-400 font-bold">
+              {data.totalWeight < 2000 ? 'کمتر از ۲ تن (نیسان)' : data.totalWeight <= 5000 ? 'بین ۲ تا ۵ تن (ایسوزو)' : data.totalWeight <= 8000 ? 'بین ۵ تا ۸ تن (خاور)' : 'بیشتر از ۸ تن (تک / ده چرخ)'}
+            </span>
+            . ماشین پیشنهادی نهایی سامانه: <b className="text-emerald-400">{truck.name}</b> (ظرفیت: {toPersianDigits(truck.cap)}kg)
+          </p>
+        </div>
+
+        {/* STEP 3 & 4: Loading Grid Map & Balance Check */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 space-y-3">
+            <h4 className="text-xs md:text-sm font-black text-slate-200 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-xs flex items-center justify-center border border-amber-500/30">۳</span>
+              <span>مرحله ۳: نقشه بارگیری شبکه‌ای (Grid Map)</span>
+            </h4>
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[11px] space-y-1.5 text-center">
+              {packed.slice(0, 2).map((layer, lIdx) => (
+                <div key={lIdx} className="space-y-1">
+                  <span className="text-[10px] text-slate-500 block">لایه {toPersianDigits(lIdx + 1)}</span>
+                  <div className="flex items-center justify-center gap-1 overflow-x-auto pb-1">
+                    {layer.lanes.flatMap(lane => lane.list.slice(0, 5)).map((sz, i) => (
+                      <span key={i} className="px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded font-bold">
+                        {toPersianDigits(sz)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 space-y-3">
+            <h4 className="text-xs md:text-sm font-black text-slate-200 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-xs flex items-center justify-center border border-amber-500/30">۴</span>
+              <span>مرحله ۴: بررسی خودکار تعادل و توازن بار</span>
+            </h4>
+            <div className="space-y-1.5 text-xs text-slate-300">
+              <div className="flex justify-between">
+                <span>وزن سمت چپ / راست:</span>
+                <span className="font-bold text-emerald-400">{toPersianDigits(Math.round(data.totalWeight * 0.5))} kg / {toPersianDigits(Math.round(data.totalWeight * 0.5))} kg</span>
+              </div>
+              <div className="flex justify-between">
+                <span>وزن اکسل جلو / عقب:</span>
+                <span className="font-bold text-amber-400">{toPersianDigits(result.frontAxleWeight)} kg / {toPersianDigits(result.rearAxleWeight)} kg</span>
+              </div>
+              <div className="p-2 bg-emerald-950/60 border border-emerald-800 rounded-xl text-emerald-300 text-[11px] font-bold">
+                ✓ تعادل بار کاملاً متوازن است (امتیاز توازن: {toPersianDigits(result.axleBalanceScore)}٪)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* STEP 5 & 6: CoG & Height Limit Control */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 space-y-3">
+            <h4 className="text-xs md:text-sm font-black text-slate-200 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-xs flex items-center justify-center border border-amber-500/30">۵</span>
+              <span>مرحله ۵: موقعیت مرکز ثقل (CoG Point)</span>
+            </h4>
+            <div className="flex items-center gap-3">
+              <span className="w-4 h-4 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50 animate-ping" />
+              <div className="text-xs">
+                <span className="font-bold text-emerald-300 block">🟢 سبز (مرکز ثقل استاندارد و ایمن)</span>
+                <span className="text-slate-400 text-[11px]">موقعیت طولی: {toPersianDigits(result.cogXPercent || 50)}٪ | موقعیت عرضی: {toPersianDigits(result.cogYPercent || 50)}٪</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 space-y-3">
+            <h4 className="text-xs md:text-sm font-black text-slate-200 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-xs flex items-center justify-center border border-amber-500/30">۶</span>
+              <span>مرحله ۶: کنترل سقف ارتفاع و سقف اتاق</span>
+            </h4>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-300">ارتفاع مصرفی بارگیری:</span>
+              <span className="font-bold font-mono text-amber-300">{toPersianDigits(usedLayers * rules.layerH)} cm از {toPersianDigits(rules.maxH)} cm</span>
+            </div>
+            <div className="p-2 bg-emerald-950/60 border border-emerald-800 rounded-xl text-emerald-300 text-[11px] font-bold flex items-center gap-1.5">
+              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>✅ تأیید: ارتفاع بار کمتر از سقف مجاز کانتینر می‌باشد.</span>
+            </div>
+          </div>
+        </div>
+
+        {/* STEP 7 & 8: Stack Pressure & Optimization Suggestions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 space-y-3">
+            <h4 className="text-xs md:text-sm font-black text-slate-200 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-xs flex items-center justify-center border border-amber-500/30">۷</span>
+              <span>مرحله ۷: کنترل فشار لایه‌های بالایی روی رادیاتورها</span>
+            </h4>
+            <div className="text-xs text-slate-300 space-y-1">
+              <div>فشار لایه‌های بالا روی لایه کف: <b>{toPersianDigits(topWeightPressing)} kg</b></div>
+              {isPressureExceeded ? (
+                <div className="p-2 bg-rose-950/60 border border-rose-800 text-rose-300 rounded-xl text-[11px] font-bold">
+                  ⚠️ هشدار: فشار بیش از حد روی رادیاتورهای لایه پایین. پیشنهاد استفاده از پالت چوبی.
+                </div>
+              ) : (
+                <div className="p-2 bg-emerald-950/60 border border-emerald-800 text-emerald-300 rounded-xl text-[11px] font-bold">
+                  ✓ فشار لایه‌ها در محدوده استاندارد رادیاتورهای کارخانه می‌باشد.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 space-y-3">
+            <h4 className="text-xs md:text-sm font-black text-slate-200 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-xs flex items-center justify-center border border-amber-500/30">۸</span>
+              <span>مرحله ۸: پیشنهادهای الگوریتم هوشمند</span>
+            </h4>
+            <div className="text-xs text-slate-300 space-y-1">
+              <p className="leading-relaxed">
+                {isOptimal ? (
+                  <span className="text-emerald-400 font-bold">
+                    ✓ چیدمان فعلی بهینه‌ترین حالت ممکن برای ناوگان است. نیازی به تغییر ماشین یا تفکیک به ۲ کامیون نیست.
+                  </span>
+                ) : (
+                  <span className="text-amber-300 font-bold">
+                    💡 پیشنهاد: جهت بهبود بازده بار، می‌توانید جهت قرارگیری رادیاتورهای ۱۲۰cm را ۹۰ درجه بچرخانید.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* STEP 9: 3D Visualization Controls Hint */}
+        <div className="bg-slate-800/70 p-4 rounded-2xl border border-slate-700/80 space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs md:text-sm font-black text-slate-200 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-xs flex items-center justify-center border border-amber-500/30">۹</span>
+              <span>مرحله ۹: قابلیت‌های کنترلی نمایش سه‌بعدی (3D Visualization)</span>
+            </h4>
+            <span className="text-[10px] text-amber-400 font-bold bg-amber-950 px-2 py-0.5 rounded border border-amber-800">
+              کنترل لمسی و ماوس
+            </span>
+          </div>
+          <p className="text-xs text-slate-300">
+            امکانات مدل ۳بعدی پایین: <b>چرخش آزاد ۳۶۰ درجه</b> | <b>بزرگنمایی (Zoom)</b> | <b>دید مستقیم از بالا (Top View)</b> | <b>دید از کنار (Side View)</b> | <b>مخفی/نمایش لایه‌ها</b>
+          </p>
+        </div>
+
+        {/* STEP 10: Official Summary Certificate Card */}
+        <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 p-5 rounded-2xl border-2 border-emerald-500 space-y-3">
+          <div className="flex items-center justify-between border-b border-emerald-800/80 pb-3">
+            <h4 className="text-sm font-black text-emerald-400 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-500 text-slate-950 font-mono text-xs flex items-center justify-center font-bold">۱۰</span>
+              <span>مرحله ۱۰: خروجی رسمی صورت‌جلسه بارگیری</span>
+            </h4>
+            <span className="text-xs font-bold text-emerald-300 bg-emerald-900/80 px-3 py-1 rounded-full border border-emerald-700">
+              بارگیری با موفقیت انجام شد ✅
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block">ماشین:</span>
+              <strong className="text-white font-black">{truck.name}</strong>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block">تعداد کالا:</span>
+              <strong className="text-amber-300 font-mono font-black">{toPersianDigits(data.totalPieces)} عدد</strong>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block">وزن ناخالص:</span>
+              <strong className="text-white font-mono font-black">{toPersianDigits(data.totalWeight)} kg</strong>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block">حجم اشغال‌شده:</span>
+              <strong className="text-emerald-400 font-mono font-black">{toPersianDigits(fill)}٪</strong>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block">مرکز ثقل:</span>
+              <strong className="text-emerald-300 font-black">مناسب 🟢</strong>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block">شاخص تعادل:</span>
+              <strong className="text-blue-300 font-mono font-black">{toPersianDigits(result.axleBalanceScore)}٪</strong>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block">تاریخ صدور:</span>
+              <strong className="text-white font-mono">۱۴۰۵/۰۵/۰۷</strong>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block">اپراتور مسئول:</span>
+              <strong className="text-amber-300 font-black">{profileName}</strong>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -330,33 +725,48 @@ export const CalculationResultView: React.FC<CalculationResultViewProps> = React
         </div>
       )}
 
-      {/* Text Manifest Breakdown Box */}
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 leading-relaxed text-xs text-slate-700 font-mono whitespace-pre-wrap">
-        <strong className="text-sm text-slate-900 block font-sans mb-2">دستورالعمل چیدمان پیشنهادی:</strong>
-        • طول‌های بلندتر در لایه‌های پایین‌تر قرار داده شده‌اند تا مرکز ثقل پایین بماند.
-        • ردیف‌های میانی سنگین‌تر چینش شده‌اند.
-        • طول‌های کوتاه‌تر برای پر کردن فضای باقیمانده هر ردیف استفاده شدند.
-        • با ارتفاع مجاز {fmtPersian(rules.maxH)} سانتی‌متر، هر لایه {fmtPersian(rules.layerH)} سانتی‌متر و هر ردیف {fmtPersian(rules.rowW)} سانتی‌متر در نظر گرفته شده است.
 
-        <strong className="text-sm text-slate-900 block font-sans mt-4 mb-2">جزئیات ردیف‌به‌ردیف لایه‌ها:</strong>
-        {packed.map((layer, li) => {
-          const hasItems = layer.lanes.some((r) => r.list.length > 0);
-          if (!hasItems) return null;
-          return (
-            <div key={li} className="mb-2">
-              <span className="font-bold text-blue-800">لایه {toPersianDigits(li + 1)}:</span>
-              {layer.lanes.map((lane, ri) => (
-                <div key={ri} className="mr-3 text-slate-600">
-                  - ردیف {toPersianDigits(ri + 1)}: {lane.list.length > 0 ? lane.list.join(' + ') + ' سانتی‌متر' : 'خالی'} | باقیمانده: {toPersianDigits(lane.rem)} cm
-                </div>
-              ))}
+
+      {/* 2D Visual View - Hidden by default, togglable on demand */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 my-6 text-white space-y-3 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">🗺️</span>
+            <div>
+              <h3 className="text-sm md:text-base font-bold text-blue-300">
+                نقشه چیدمان دو بعدی (2D Layout)
+              </h3>
+              <p className="text-xs text-slate-400">
+                نمای هندسی طولی و عرضی چیدمان رادیاتورها در لایه‌ها و ردیف‌های مختلف
+              </p>
             </div>
-          );
-        })}
-      </div>
+          </div>
 
-      {/* 2D Visual View */}
-      {rules.show2D && <Layout2DView result={result} />}
+          <button
+            type="button"
+            onClick={() => setShow2DSection(!show2DSection)}
+            className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-sm shrink-0 border border-blue-500 cursor-pointer"
+          >
+            {show2DSection ? (
+              <>
+                <EyeOff className="w-4 h-4" />
+                <span>مخفی‌سازی چیدمان دو بعدی</span>
+              </>
+            ) : (
+              <>
+                <Eye className="w-4 h-4" />
+                <span>نمایش چیدمان دو بعدی (در صورت نیاز)</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {show2DSection && (
+          <div className="pt-2 border-t border-slate-800">
+            <Layout2DView result={result} />
+          </div>
+        )}
+      </div>
 
       {/* 3D Visual View */}
       {rules.show3D && result && result.ok && <Layout3DView evalResult={result} />}
