@@ -1,5 +1,24 @@
 import { VehiclePreset, UserProfileKey, FeatureKey, FeatureDef, PluginModule, FeatureAccess, PalletConfig } from '../types';
 
+export interface RadiatorSpec {
+  size: number;
+  weight: number;
+  color: string;
+  label: string;
+}
+
+export const RADIATOR_SPECS: Record<number, RadiatorSpec> = {
+  40: { size: 40, weight: 10, color: '#ec4899', label: 'رادیاتور ۴۰ سانتی' },
+  60: { size: 60, weight: 12, color: '#eab308', label: 'رادیاتور ۶۰ سانتی' },
+  80: { size: 80, weight: 15, color: '#ef4444', label: 'رادیاتور ۸۰ سانتی' },
+  100: { size: 100, weight: 20, color: '#3b82f6', label: 'رادیاتور ۱۰۰ سانتی' },
+  120: { size: 120, weight: 22, color: '#22c55e', label: 'رادیاتور ۱۲۰ سانتی' },
+  140: { size: 140, weight: 24, color: '#a855f7', label: 'رادیاتور ۱۴۰ سانتی' },
+  160: { size: 160, weight: 25, color: '#f97316', label: 'رادیاتور ۱۶۰ سانتی' },
+  180: { size: 180, weight: 28, color: '#64748b', label: 'رادیاتور ۱۸۰ سانتی' },
+  200: { size: 200, weight: 30, color: '#06b6d4', label: 'رادیاتور ۲۰۰ سانتی' },
+};
+
 export const RADIATOR_SIZES = [40, 60, 80, 100, 120, 140, 160, 180, 200] as const;
 
 export const DEFAULT_PER_SIZE_PALLET_SPECS = {
@@ -65,16 +84,16 @@ export const PALLET_MATERIAL_PRESETS: Record<'wooden' | 'metal' | 'plastic', { n
 };
 
 export const VEHICLE_PRESETS: VehiclePreset[] = [
-  { name: 'خاور ۶ تن', L: 470, W: 220, cap: 3000, radiatorMeterRange: '۶۰ تا ۱۰۰ متر', nominalTonnage: '۳ تن', minMeters: 60, maxMeters: 100 },
-  { name: 'خاور ۸ تن', L: 500, W: 210, cap: 4000, radiatorMeterRange: '۱۰۰ تا ۱۳۵ متر', nominalTonnage: '۴ تن', minMeters: 100, maxMeters: 135 },
-  { name: '۹۱۱ پنج تن', L: 470, W: 200, cap: 5000, radiatorMeterRange: '۱۳۵ تا ۱۶۵ متر', nominalTonnage: '۵ تن', minMeters: 135, maxMeters: 165 },
-  { name: 'تک ۱۰ تن', L: 580, W: 220, cap: 10000, radiatorMeterRange: '۱۶۵ تا ۲۲۰ متر', nominalTonnage: '۱۰ تن', minMeters: 165, maxMeters: 220 },
-  { name: 'ده چرخ', L: 680, W: 230, cap: 15000, radiatorMeterRange: '۲۲۰ تا ۲۶۰ متر', nominalTonnage: '۱۵ تن', minMeters: 220, maxMeters: 260 },
-  { name: 'تریلی', L: 1200, W: 250, cap: 22000, radiatorMeterRange: '۲۶۰ تا ۵۲۰ متر', nominalTonnage: '۲۲ تن', minMeters: 260, maxMeters: 520 },
-  { name: 'نیسان', L: 200, W: 200, cap: 2000, radiatorMeterRange: '۲۵ تا ۶۰ متر', nominalTonnage: '۲ تن', minMeters: 25, maxMeters: 60 },
-  { name: 'وانت', L: 200, W: 150, cap: 500, radiatorMeterRange: '۱ تا ۱۵ متر', nominalTonnage: '۵۰۰ کیلوگرم', minMeters: 1, maxMeters: 15 },
-  { name: 'مزدا', L: 200, W: 150, cap: 1000, radiatorMeterRange: '۱۵ تا ۲۵ متر', nominalTonnage: '۱ تن', minMeters: 15, maxMeters: 25 },
-  { name: 'سفارشی', L: 470, W: 220, cap: 6000, radiatorMeterRange: 'دلخواه', nominalTonnage: 'سفارشی' }
+  { id: 'truck6m', name: 'خاور ۶ تن', L: 470, W: 220, H: 200, cap: 3000, radiatorMeterRange: '۶۰ تا ۱۰۰ متر', nominalTonnage: '۳ تن', minMeters: 60, maxMeters: 100 },
+  { id: 'truck8m', name: 'خاور ۸ تن', L: 500, W: 210, H: 200, cap: 4000, radiatorMeterRange: '۱۰۰ تا ۱۳۵ متر', nominalTonnage: '۴ تن', minMeters: 100, maxMeters: 135 },
+  { id: 'truck911', name: '۹۱۱ پنج تن', L: 470, W: 200, H: 200, cap: 5000, radiatorMeterRange: '۱۳۵ تا ۱۶۵ متر', nominalTonnage: '۵ تن', minMeters: 135, maxMeters: 165 },
+  { id: 'truck10t', name: 'تک ۱۰ تن', L: 580, W: 220, H: 220, cap: 10000, radiatorMeterRange: '۱۶۵ تا ۲۲۰ متر', nominalTonnage: '۱۰ تن', minMeters: 165, maxMeters: 220 },
+  { id: 'wheel10', name: 'ده چرخ', L: 680, W: 230, H: 220, cap: 15000, radiatorMeterRange: '۲۲۰ تا ۲۶۰ متر', nominalTonnage: '۱۵ تن', minMeters: 220, maxMeters: 260 },
+  { id: 'trailer', name: 'تریلی', L: 1200, W: 250, H: 250, cap: 22000, radiatorMeterRange: '۲۶۰ تا ۵۲۰ متر', nominalTonnage: '۲۲ تن', minMeters: 260, maxMeters: 520 },
+  { id: 'nissan', name: 'نیسان', L: 200, W: 200, H: 120, cap: 2000, radiatorMeterRange: '۲۵ تا ۶۰ متر', nominalTonnage: '۲ تن', minMeters: 25, maxMeters: 60 },
+  { id: 'pickup', name: 'وانت', L: 200, W: 150, H: 100, cap: 500, radiatorMeterRange: '۱ تا ۱۵ متر', nominalTonnage: '۵۰۰ کیلوگرم', minMeters: 1, maxMeters: 15 },
+  { id: 'mazda', name: 'مزدا', L: 200, W: 150, H: 100, cap: 1000, radiatorMeterRange: '۱۵ تا ۲۵ متر', nominalTonnage: '۱ تن', minMeters: 15, maxMeters: 25 },
+  { id: 'custom', name: 'سفارشی', L: 470, W: 220, H: 200, cap: 6000, radiatorMeterRange: 'دلخواه', nominalTonnage: 'سفارشی' }
 ];
 
 export const PROFILE_FEATURES: Record<UserProfileKey, FeatureKey[]> = {

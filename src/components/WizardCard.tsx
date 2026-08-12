@@ -11,7 +11,10 @@ import {
   LayoutGrid,
   Sparkles,
   PackageCheck,
-  DollarSign
+  DollarSign,
+  FileText,
+  Layers,
+  CheckSquare
 } from 'lucide-react';
 import {
   RadiatorCounts,
@@ -99,9 +102,12 @@ export const WizardCard: React.FC<WizardCardProps> = ({
   const totalPieces = Object.values(counts).reduce((acc: number, curr: number) => acc + (Number(curr) || 0), 0);
 
   const steps = [
-    { num: 1, title: '۱. ثبت و تأیید رادیاتورها', icon: Box },
-    { num: 2, title: '۲. پیشنهادیابی و انتخاب ماشین', icon: Truck },
-    { num: 3, title: '۳. الگوی چیدمان ۲بعدی و ۳بعدی', icon: CheckCircle2 },
+    { num: 1, title: '۱. شماره سفارش و حواله', icon: FileText },
+    { num: 2, title: '۲. ثبت مقادیر رادیاتورها', icon: Box },
+    { num: 3, title: '۳. تنظیم تعداد لایه‌ها', icon: Layers },
+    { num: 4, title: '۴. انتخاب هوشمند خودرو', icon: Truck },
+    { num: 5, title: '۵. بازبینی چیدمان کانتینر', icon: Calculator },
+    { num: 6, title: '۶. تأیید نهایی بارگیری', icon: CheckCircle2 },
   ];
 
   return (
@@ -115,10 +121,10 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             </span>
             <div>
               <h2 className="text-base md:text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                راهنمای گام‌به‌گام بارگیری (حالت Wizard)
+                مراحل ۶گانه گردش‌کار ثبت بارگیری (ثبت سفارش انبار)
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                تغییر کامل تمام پارامترهای بارگیری به صورت گام‌به‌گام با پیش‌نمایش آنلاین چیدمان
+                تکمیل گردش کار ثبت بار با دقت بالا و توازن مرکز ثقل
               </p>
             </div>
           </div>
@@ -136,11 +142,11 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             }`}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
-            {showAllCardsInWizard ? 'حالت گام‌به‌گام' : 'نمایش یکجای همه پارامترها'}
+            {showAllCardsInWizard ? 'حالت گام‌به‌گام' : 'نمایش یکجای همه مراحل'}
           </button>
 
           {/* Stepper Buttons */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
             {steps.map((s) => {
               const Icon = s.icon;
               const isDone = s.num < step;
@@ -162,8 +168,8 @@ export const WizardCard: React.FC<WizardCardProps> = ({
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{s.title}</span>
-                  <span className="sm:hidden">{toPersianDigits(s.num)}</span>
+                  <span className="hidden xl:inline">{s.title}</span>
+                  <span>{toPersianDigits(s.num)}</span>
                 </button>
               );
             })}
@@ -179,6 +185,11 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             در این حالت، تمام کارت‌ها و پارامترها به صورت کامل جهت تغییر باز هستند و نتایج فوراً در مدل ۳بعدی پایین محاسبه می‌شود.
           </div>
 
+          <DestinationCard
+            info={destinationInfo}
+            onChange={onDestinationInfoChange}
+            access={getFeatureAccess('destination')}
+          />
           <OrderPresetsImporter onApplyCounts={onCountsChange} />
           <QuantitiesCard
             counts={counts}
@@ -195,6 +206,12 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             totalRadiators={totalPieces}
             access={getFeatureAccess('pallets')}
           />
+          <LayoutRulesCard
+            rules={rules}
+            onChange={onRulesChange}
+            onRunCalc={onFinishWizard}
+            access={getFeatureAccess('layout_rules')}
+          />
           <VehicleCard
             details={truckDetails}
             onChange={onTruckDetailsChange}
@@ -207,23 +224,6 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             bestVehicleName={bestVehicleName}
             bestVehicleFill={bestVehicleFill}
           />
-          <DestinationCard
-            info={destinationInfo}
-            onChange={onDestinationInfoChange}
-            access={getFeatureAccess('destination')}
-          />
-          <MultiStopCard
-            destinationInfo={destinationInfo}
-            onChange={onDestinationInfoChange}
-            lifoEnabled={rules.lifoPriority}
-            onToggleLifo={(val) => onRulesChange({ ...rules, lifoPriority: val })}
-          />
-          <LayoutRulesCard
-            rules={rules}
-            onChange={onRulesChange}
-            onRunCalc={onFinishWizard}
-            access={getFeatureAccess('layout_rules')}
-          />
           <VehicleRecommendationCard
             counts={counts}
             customWeights={customWeights}
@@ -232,9 +232,15 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             selectedTruckIndex={selectedTruckIndex}
             onSelectVehiclePreset={(idx, preset) => {
               onTruckSelect(idx);
-              onTruckDetailsChange({ ...truckDetails, model: preset.name, L: preset.L, W: preset.W, cap: preset.cap });
+              onTruckDetailsChange({ ...truckDetails, id: preset.id, model: preset.name, L: preset.L, W: preset.W, H: preset.H, cap: preset.cap });
             }}
             access={getFeatureAccess('manual_vehicle')}
+          />
+          <MultiStopCard
+            destinationInfo={destinationInfo}
+            onChange={onDestinationInfoChange}
+            lifoEnabled={rules.lifoPriority}
+            onToggleLifo={(val) => onRulesChange({ ...rules, lifoPriority: val })}
           />
           <ShippingCostCard
             costInfo={shippingCostInfo}
@@ -254,16 +260,69 @@ export const WizardCard: React.FC<WizardCardProps> = ({
         </div>
       ) : (
         <div>
-          {/* STEP 1: QUANTITIES, ORDER IMPORT & CONFIRMATION */}
+          {/* STAGE 1: ORDER NUMBER */}
           {step === 1 && (
-            <div className="space-y-6">
-              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center justify-between">
-                <span className="flex items-center gap-2 font-semibold">
-                  <PackageCheck className="w-4 h-4 text-blue-600" />
-                  گام ۱: مشخص کردن تعداد رادیاتورها، محاسبه توناژ و متراژ، و تایید سفارش
+            <div className="space-y-6 animate-fadeIn">
+              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center justify-between">
+                <span className="flex items-center gap-2 font-bold">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  مرحله ۱: وارد کردن شماره حواله سفارش و مشخصات ترابری مقصد
                 </span>
-                <span className="font-bold bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-700">
-                  مجموع: {toPersianDigits(Number(totalPieces))} عدد
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">شماره حواله / سفارش:</label>
+                    <input
+                      type="text"
+                      value={truckDetails.waybillNo || ''}
+                      onChange={(e) => onTruckDetailsChange({ ...truckDetails, waybillNo: e.target.value })}
+                      placeholder="مثال: حواله-۸۸۳۱"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نام راننده کانتینر:</label>
+                    <input
+                      type="text"
+                      value={truckDetails.driverName || ''}
+                      onChange={(e) => onTruckDetailsChange({ ...truckDetails, driverName: e.target.value })}
+                      placeholder="مثال: علیرضا محمدی"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">شماره پلاک کامیون:</label>
+                    <input
+                      type="text"
+                      value={truckDetails.plate || ''}
+                      onChange={(e) => onTruckDetailsChange({ ...truckDetails, plate: e.target.value })}
+                      placeholder="مثال: ۲۲ ع ۸۴۳ ایران ۴۴"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <DestinationCard
+                info={destinationInfo}
+                onChange={onDestinationInfoChange}
+                access={getFeatureAccess('destination')}
+              />
+            </div>
+          )}
+
+          {/* STAGE 2: RADIATOR REGISTRATION */}
+          {step === 2 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center justify-between">
+                <span className="flex items-center gap-2 font-bold">
+                  <Box className="w-4 h-4 text-blue-600" />
+                  مرحله ۲: ثبت و وارد کردن تعداد رادیاتورهای پنلی سفارش
+                </span>
+                <span className="font-bold bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-700 text-xs">
+                  تعداد کل ثبت‌شده: {toPersianDigits(Number(totalPieces))} عدد
                 </span>
               </div>
 
@@ -275,7 +334,7 @@ export const WizardCard: React.FC<WizardCardProps> = ({
                 customWeights={customWeights}
                 onCustomWeightsChange={onCustomWeightsChange}
                 access={getFeatureAccess('loading_items')}
-                onConfirm={() => setStep(2)}
+                onConfirm={() => setStep(3)}
                 manualLayers={rules.manualLayers}
                 onManualLayersChange={(layers) => onRulesChange({ ...rules, manualLayers: layers })}
               />
@@ -290,12 +349,49 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             </div>
           )}
 
-          {/* STEP 2: VEHICLE SELECTION & RECOMMENDATION BASED ON QUANTITY, METERAGE & TONNAGE */}
-          {step === 2 && (
-            <div className="space-y-6">
-              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2 font-semibold">
+          {/* STAGE 3: NUMBER OF LAYERS */}
+          {step === 3 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2 font-bold">
+                <Layers className="w-4 h-4 text-blue-600" />
+                مرحله ۳: تنظیم محدودیت تعداد لایه‌ها و قوانین فنی چیدمان بارگیری
+              </div>
+
+              <LayoutRulesCard
+                rules={rules}
+                onChange={onRulesChange}
+                onRunCalc={onFinishWizard}
+                access={getFeatureAccess('layout_rules')}
+              />
+
+              <div className="bg-slate-50 dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700">
+                <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 mb-2">تعیین تعداد لایه‌های چیدمان دستی (Requested Layers):</h4>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min="1"
+                    max="15"
+                    value={rules.manualLayers || 10}
+                    onChange={(e) => onRulesChange({ ...rules, manualLayers: Number(e.target.value) })}
+                    className="w-full accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-sm font-black font-mono bg-blue-100 dark:bg-blue-950/60 px-3 py-1 rounded text-blue-700 dark:text-blue-300">
+                    {toPersianDigits(rules.manualLayers || 10)} لایه
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
+                  تعداد لایه‌های درخواستی (requestedLayers) جهت محدود کردن چیدمان به ارتفاع دلخواه استفاده می‌شود. تعداد لایه‌های نهایی (usedLayers) به صورت هوشمند از خروجی چیدمان کانتینر محاسبه خواهد شد.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* STAGE 4: SMART VEHICLE SELECTION */}
+          {step === 4 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2 font-bold">
                 <Truck className="w-4 h-4 text-blue-600" />
-                گام ۲: پیشنهاد هوشمند و انتخاب ماشین مناسب بر اساس متراژ، توناژ و تعداد رادیاتورها
+                مرحله ۴: پیشنهاد هوشمند و انتخاب مدل خودرو بر اساس ظرفیت، ابعاد کانتینر و وزن
               </div>
 
               {/* Automatic Vehicle Recommendation Engine */}
@@ -307,7 +403,7 @@ export const WizardCard: React.FC<WizardCardProps> = ({
                 selectedTruckIndex={selectedTruckIndex}
                 onSelectVehiclePreset={(idx, preset) => {
                   onTruckSelect(idx);
-                  onTruckDetailsChange({ ...truckDetails, model: preset.name, L: preset.L, W: preset.W, cap: preset.cap });
+                  onTruckDetailsChange({ ...truckDetails, id: preset.id, model: preset.name, L: preset.L, W: preset.W, H: preset.H, cap: preset.cap });
                 }}
                 access={getFeatureAccess('manual_vehicle')}
               />
@@ -325,42 +421,16 @@ export const WizardCard: React.FC<WizardCardProps> = ({
                 bestVehicleName={bestVehicleName}
                 bestVehicleFill={bestVehicleFill}
               />
-
-              <DestinationCard
-                info={destinationInfo}
-                onChange={onDestinationInfoChange}
-                access={getFeatureAccess('destination')}
-              />
-
-              {/* Step 2 Confirmation Button to move to 2D/3D Layout */}
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => setStep(3)}
-                  className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs md:text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>تأیید ماشین و دریافت الگوی چیدمان ۲بعدی و ۳بعدی</span>
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           )}
 
-          {/* STEP 3: 2D & 3D LAYOUT PATTERN & EXECUTION */}
-          {step === 3 && (
-            <div className="space-y-6">
-              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-semibold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                گام ۳: دریافت الگوی چیدمان ۲بعدی و ۳بعدی، محاسبه توزیع اکسل‌ها و صدور حواله بارگیری
+          {/* STAGE 5: LAYOUT REVIEW */}
+          {step === 5 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2 font-bold">
+                <Calculator className="w-4 h-4 text-blue-600" />
+                مرحله ۵: بازبینی توزیع اکسل جلو/عقب، محاسبات تراز مرکز ثقل (CoG) و بازده پرشدن
               </div>
-
-              <LayoutRulesCard
-                rules={rules}
-                onChange={onRulesChange}
-                onRunCalc={onFinishWizard}
-                access={getFeatureAccess('layout_rules')}
-              />
 
               <MultiStopCard
                 destinationInfo={destinationInfo}
@@ -369,21 +439,38 @@ export const WizardCard: React.FC<WizardCardProps> = ({
                 onToggleLifo={(val) => onRulesChange({ ...rules, lifoPriority: val })}
               />
 
+              <div className="p-4 bg-slate-900 text-white rounded-xl space-y-2">
+                <h4 className="text-xs font-black text-amber-400">راهنما و دستورالعمل بازبینی چیدمان:</h4>
+                <p className="text-[11px] leading-relaxed text-slate-300">
+                  قبل از تایید نهایی، مطمئن شوید که بازده کانتینر بیش از ۷۰٪ باشد و هیچ همپوشانی (overlap) در 3D چیدمان وجود نداشته باشد. مرکز ثقل باید در محدوده ۴۵٪ تا ۵۵٪ طولی و دقیقاً ۵۰٪ عرضی باشد تا از واژگونی یا اضافه بار روی اکسل فرمان پیشگیری شود.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* STAGE 6: FINAL CONFIRMATION */}
+          {step === 6 && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3.5 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-bold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                مرحله ۶: ثبت تصویر بارگیری نهایی، هزینه حمل، امضای دیجیتال و صدور حواله
+              </div>
+
               {/* Confirmation box */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="p-4 bg-white dark:bg-slate-800 border-2 border-dashed border-blue-400/50 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={rules.confirmLoading}
                     onChange={(e) => onRulesChange({ ...rules, confirmLoading: e.target.checked })}
-                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
                   />
                   <div>
-                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                      تأیید نهایی عملیات بارگیری و انطباق با انبار
+                    <span className="text-sm font-black text-slate-800 dark:text-slate-100">
+                      تأیید نهایی عملیات بارگیری و تطابق بار با انبار کارخانه رادیاتور
                     </span>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      با تایید این بخش، گزارش نهایی آماده صدور و چاپ با امضای دیجیتال می‌شود.
+                      با فعال‌سازی تاییدیه بارگیری، مجوز حواله خروج رسمی برای نگهبانی کارخانه صادر می‌گردد.
                     </p>
                   </div>
                 </label>
@@ -416,18 +503,18 @@ export const WizardCard: React.FC<WizardCardProps> = ({
           type="button"
           onClick={() => setStep((prev) => Math.max(1, prev - 1))}
           disabled={step === 1 || showAllCardsInWizard}
-          className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-300 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition"
+          className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs flex items-center gap-1.5 transition"
         >
           <ArrowRight className="w-4 h-4" />
           مرحله قبل
         </button>
 
         <div className="flex items-center gap-3">
-          {step < 3 && !showAllCardsInWizard ? (
+          {step < 6 && !showAllCardsInWizard ? (
             <button
               type="button"
-              onClick={() => setStep((prev) => Math.min(3, prev + 1))}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm shadow-blue-200 dark:shadow-none"
+              onClick={() => setStep((prev) => Math.min(6, prev + 1))}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm shadow-blue-200 dark:shadow-none cursor-pointer"
             >
               مرحله بعد
               <ArrowLeft className="w-4 h-4" />
@@ -436,7 +523,7 @@ export const WizardCard: React.FC<WizardCardProps> = ({
             <button
               type="button"
               onClick={onFinishWizard}
-              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs md:text-sm flex items-center gap-2 transition shadow-md shadow-emerald-200 dark:shadow-none"
+              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs md:text-sm flex items-center gap-2 transition shadow-md shadow-emerald-200 dark:shadow-none cursor-pointer"
             >
               <Calculator className="w-4 h-4" />
               محاسبه مجدد چیدمان و نمایش الگوی ۳بعدی
@@ -447,4 +534,3 @@ export const WizardCard: React.FC<WizardCardProps> = ({
     </div>
   );
 };
-
