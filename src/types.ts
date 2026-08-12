@@ -68,9 +68,11 @@ export interface CustomVehicleRecord {
 export type DashboardTab = 'dashboard' | 'drivers' | 'vehicles' | 'cargo' | 'layout' | 'reports' | 'settings';
 
 export interface VehiclePreset {
+  id: string; // Stable vehicle ID
   name: string;
   L: number; // Length in cm
   W: number; // Width in cm
+  H: number; // Height in cm
   cap: number; // Weight capacity in kg
   radiatorMeterRange?: string; // e.g. "۶۰ تا ۱۰۰ متر"
   nominalTonnage?: string; // e.g. "۳ تن" or "۵۰۰ کیلوگرم"
@@ -79,9 +81,11 @@ export interface VehiclePreset {
 }
 
 export interface TruckDetails {
+  id: string; // Stable vehicle ID
   model: string;
   L: number;
   W: number;
+  H: number; // Height in cm
   cap: number;
   plate: string;
   driverName: string;
