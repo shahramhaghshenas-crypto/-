@@ -540,8 +540,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     const timeStr = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
 
     const tableRows = sequenceItems.map((item) => {
-      const w = item.rotated ? item.length : item.width;
-      const l = item.rotated ? item.width : item.length;
+      const w = item.width;
+      const l = item.length;
       const seq = item.sequence || 1;
       const isBlocked = sequenceBlockingWarnings.some(w => w.blockedItemId === item.id);
 
@@ -880,8 +880,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     const freeNodes: FreeRectangle[] = [{ x: 0, y: 0, width: customL, height: customW }];
 
     layer1Items.forEach((item) => {
-      const itemW = item.rotated ? item.length : item.width;
-      const itemL = item.rotated ? item.width : item.length;
+      const itemW = item.width;
+      const itemL = item.length;
       const placedNode = { x: item.x, y: item.y, width: itemW, height: itemL };
 
       let numRects = freeNodes.length;
@@ -1092,9 +1092,10 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     a: { x: number; y: number; z: number; w: number; l: number; h: number },
     b: { x: number; y: number; z: number; w: number; l: number; h: number }
   ) => {
-    const xOverlap = a.x < b.x + b.w && a.x + a.w > b.x;
-    const yOverlap = a.y < b.y + b.l && a.y + a.l > b.y;
-    const zOverlap = a.z < b.z + b.h && a.z + a.h > b.z;
+    const epsilon = 0.05;
+    const xOverlap = a.x + epsilon < b.x + b.w && a.x + a.w > b.x + epsilon;
+    const yOverlap = a.y + epsilon < b.y + b.l && a.y + a.l > b.y + epsilon;
+    const zOverlap = a.z + epsilon < b.z + b.h && a.z + a.h > b.z + epsilon;
     return xOverlap && yOverlap && zOverlap;
   };
 
@@ -1204,8 +1205,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
     // Snap tiny gaps (<5cm) to adjacent edges or truck walls
     nearby.forEach(item => {
-      const itemW = item.rotated ? item.length : item.width;
-      const itemL = item.rotated ? item.width : item.length;
+      const itemW = item.width;
+      const itemL = item.length;
 
       if (item.x < 5) item.x = 0;
       if (item.y < 5) item.y = 0;
@@ -1245,8 +1246,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
     for (let i = 0; i < placedItems.length; i++) {
       const item = placedItems[i];
-      const itemW = item.rotated ? item.length : item.width;
-      const itemL = item.rotated ? item.width : item.length;
+      const itemW = item.width;
+      const itemL = item.length;
 
       totalWeight += item.weight;
       totalVolumeM3 += (itemW * itemL * item.height) / 1000000;
@@ -1467,7 +1468,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
   const handleRotate90Selected = () => {
     if (selectedItemIds.length === 0) return;
     const updated = placedItems.map(item =>
-      selectedItemIds.includes(item.id) ? { ...item, rotated: !item.rotated } : item
+      selectedItemIds.includes(item.id) ? { ...item, rotated: !item.rotated, width: item.length, length: item.width, rotationAngle: !item.rotated ? 90 : 0 } : item
     );
     updateItemsWithHistory(updated);
   };
@@ -1475,7 +1476,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
   const handleRotate180Selected = () => {
     if (selectedItemIds.length === 0) return;
     const updated = placedItems.map(item =>
-      selectedItemIds.includes(item.id) ? { ...item, rotated: !item.rotated } : item
+      selectedItemIds.includes(item.id) ? { ...item, rotated: !item.rotated, width: item.length, length: item.width, rotationAngle: !item.rotated ? 90 : 0 } : item
     );
     updateItemsWithHistory(updated);
     if (addToast) addToast('info', 'چرخش ۱۸۰ درجه اعمال شد.');
@@ -1535,8 +1536,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
     // Find clicked radiator (topmost)
     const found = [...placedItems].reverse().find(item => {
-      const itemW = item.rotated ? item.length : item.width;
-      const itemL = item.rotated ? item.width : item.length;
+      const itemW = item.width;
+      const itemL = item.length;
       return (
         clickX >= item.x &&
         clickX <= item.x + itemW &&
@@ -1740,8 +1741,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     let tempWeightedX = 0;
     let tempWeightedY = 0;
     for (const item of updatedItems) {
-      const w = item.rotated ? item.length : item.width;
-      const l = item.rotated ? item.width : item.length;
+      const w = item.width;
+      const l = item.length;
       tempTotalWeight += item.weight;
       tempWeightedX += item.weight * (item.x + w / 2);
       tempWeightedY += item.weight * (item.y + l / 2);
@@ -1956,8 +1957,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
           let cellWeightSum = 0;
           placedItems.forEach(item => {
-            const itemW = item.rotated ? item.length : item.width;
-            const itemL = item.rotated ? item.width : item.length;
+            const itemW = item.width;
+            const itemL = item.length;
             const overlapW = Math.max(0, Math.min(cellMaxX, item.x + itemW) - Math.max(cellMinX, item.x));
             const overlapH = Math.max(0, Math.min(cellMaxY, item.y + itemL) - Math.max(cellMinY, item.y));
             if (overlapW > 0 && overlapH > 0) {
@@ -2006,8 +2007,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
     // Draw Placed Radiators
     placedItems.forEach((item) => {
-      const itemW = (item.rotated ? item.length : item.width) * scaleX;
-      const itemL = (item.rotated ? item.width : item.length) * scaleY;
+      const itemW = item.width * scaleX;
+      const itemL = item.length * scaleY;
       const posX = item.x * scaleX;
       const posY = item.y * scaleY;
 
@@ -2212,8 +2213,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
           const seq = item.sequence || (idx + 1);
           if (viewTab === 'sequence' && sequenceAnimStep > 0 && seq > sequenceAnimStep) return;
 
-          const itemW = (item.rotated ? item.length : item.width) * scaleX;
-          const itemL = (item.rotated ? item.width : item.length) * scaleY;
+          const itemW = item.width * scaleX;
+          const itemL = item.length * scaleY;
           const targetPxX = (item.x * scaleX) + itemW / 2;
           const targetPxY = (item.y * scaleY) + itemL / 2;
 
@@ -2245,8 +2246,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
       // 2. Draw Sequence Number Badge Circles on Each Radiator
       placedItems.forEach((item) => {
-        const itemW = (item.rotated ? item.length : item.width) * scaleX;
-        const itemL = (item.rotated ? item.width : item.length) * scaleY;
+        const itemW = item.width * scaleX;
+        const itemL = item.length * scaleY;
         const posX = item.x * scaleX;
         const posY = item.y * scaleY;
         const seq = item.sequence || 1;
@@ -2354,7 +2355,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
         cap: customCap
       },
       lanesCount: calcLanes,
-      maxLayers: Math.max(1, Math.floor(customH / 55)),
+      maxLayers: Math.max(1, Math.floor(customH / 62)),
       usedLayers: Math.max(1, ...placedItems.map(i => i.layer || 1)),
       packed: [
         {
@@ -3716,7 +3717,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
                             </td>
 
                             <td className="p-2.5 text-center text-slate-300">
-                              {toPersianDigits(item.rotated ? item.length : item.width)} × {toPersianDigits(item.rotated ? item.width : item.length)} × {toPersianDigits(item.height)}
+                              {toPersianDigits(item.width)} × {toPersianDigits(item.length)} × {toPersianDigits(item.height)}
                             </td>
 
                             <td className="p-2.5 text-center text-slate-300">

@@ -17,8 +17,6 @@ console.log(`totalPieces: ${dataA.totalPieces}`);
 console.log(`totalWeight: ${dataA.totalWeight} kg`);
 
 // 2. Recommendations for Test A with 13 layers:
-// Wait, getVehicleRecommendations uses maxH. If layerH = 11, then maxH for 13 layers is 13 * 11 = 143.
-// Let's check recommended vehicle:
 const recA = getVehicleRecommendations(dataA, 143, 11, 11, 4500, 0, { usePallets: false }, 13);
 console.log(`Recommended vehicle: ${recA.bestResult?.truck.name} (id: ${recA.bestResult?.truck.id})`);
 console.log(`Used layers in evaluateTruck: ${recA.bestResult?.usedLayers}`);
@@ -55,7 +53,6 @@ const optA = runAdvancedOptimizer(itemsA, truckA.L, truckA.W, truckA.H, truckA.c
 console.log(`optA packed items count: ${optA.winningResult.packedItems.length}`);
 console.log(`optA unpacked items count: ${optA.winningResult.unpackedItems.length}`);
 
-// Check for 3D Overlaps in winningResult packedItems:
 const checkOverlap3D = (
   a: { x: number; y: number; z: number; w: number; l: number; h: number },
   b: { x: number; y: number; z: number; w: number; l: number; h: number }
@@ -70,12 +67,12 @@ const packedItemsA = optA.winningResult.packedItems;
 let overlapCountA = 0;
 for (let i = 0; i < packedItemsA.length; i++) {
   const item = packedItemsA[i];
-  const itemW = item.rotated ? item.length : item.width;
-  const itemL = item.rotated ? item.width : item.length;
+  const itemW = item.width;
+  const itemL = item.length;
   for (let j = i + 1; j < packedItemsA.length; j++) {
     const other = packedItemsA[j];
-    const othW = other.rotated ? other.length : other.width;
-    const othL = other.rotated ? other.width : other.length;
+    const othW = other.width;
+    const othL = other.length;
     if (checkOverlap3D(
       { x: item.x, y: item.y, z: item.z || 0, w: itemW, l: itemL, h: item.height },
       { x: other.x, y: other.y, z: other.z || 0, w: othW, l: othL, h: other.height }
@@ -128,12 +125,12 @@ let overlapCountB = 0;
 const packedItemsB = optB.winningResult.packedItems;
 for (let i = 0; i < packedItemsB.length; i++) {
   const item = packedItemsB[i];
-  const itemW = item.rotated ? item.length : item.width;
-  const itemL = item.rotated ? item.width : item.length;
+  const itemW = item.width;
+  const itemL = item.length;
   for (let j = i + 1; j < packedItemsB.length; j++) {
     const other = packedItemsB[j];
-    const othW = other.rotated ? other.length : other.width;
-    const othL = other.rotated ? other.width : other.length;
+    const othW = other.width;
+    const othL = other.length;
     if (checkOverlap3D(
       { x: item.x, y: item.y, z: item.z || 0, w: itemW, l: itemL, h: item.height },
       { x: other.x, y: other.y, z: other.z || 0, w: othW, l: othL, h: other.height }
