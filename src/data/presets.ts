@@ -65,16 +65,35 @@ export const PALLET_MATERIAL_PRESETS: Record<'wooden' | 'metal' | 'plastic', { n
 };
 
 export const VEHICLE_PRESETS: VehiclePreset[] = [
-  { name: 'خاور ۶ تن', L: 470, W: 220, cap: 3000, radiatorMeterRange: '۶۰ تا ۱۰۰ متر', nominalTonnage: '۳ تن', minMeters: 60, maxMeters: 100 },
-  { name: 'خاور ۸ تن', L: 500, W: 210, cap: 4000, radiatorMeterRange: '۱۰۰ تا ۱۳۵ متر', nominalTonnage: '۴ تن', minMeters: 100, maxMeters: 135 },
-  { name: '۹۱۱ پنج تن', L: 470, W: 200, cap: 5000, radiatorMeterRange: '۱۳۵ تا ۱۶۵ متر', nominalTonnage: '۵ تن', minMeters: 135, maxMeters: 165 },
-  { name: 'تک ۱۰ تن', L: 580, W: 220, cap: 10000, radiatorMeterRange: '۱۶۵ تا ۲۲۰ متر', nominalTonnage: '۱۰ تن', minMeters: 165, maxMeters: 220 },
-  { name: 'ده چرخ', L: 680, W: 230, cap: 15000, radiatorMeterRange: '۲۲۰ تا ۲۶۰ متر', nominalTonnage: '۱۵ تن', minMeters: 220, maxMeters: 260 },
-  { name: 'تریلی', L: 1200, W: 250, cap: 22000, radiatorMeterRange: '۲۶۰ تا ۵۲۰ متر', nominalTonnage: '۲۲ تن', minMeters: 260, maxMeters: 520 },
-  { name: 'نیسان', L: 200, W: 200, cap: 2000, radiatorMeterRange: '۲۵ تا ۶۰ متر', nominalTonnage: '۲ تن', minMeters: 25, maxMeters: 60 },
-  { name: 'وانت', L: 200, W: 150, cap: 500, radiatorMeterRange: '۱ تا ۱۵ متر', nominalTonnage: '۵۰۰ کیلوگرم', minMeters: 1, maxMeters: 15 },
-  { name: 'مزدا', L: 200, W: 150, cap: 1000, radiatorMeterRange: '۱۵ تا ۲۵ متر', nominalTonnage: '۱ تن', minMeters: 15, maxMeters: 25 },
-  { name: 'سفارشی', L: 470, W: 220, cap: 6000, radiatorMeterRange: 'دلخواه', nominalTonnage: 'سفارشی' }
+  { id: 'nissan', name: 'نیسان', L: 240, W: 160, H: 120, cap: 2000, radiatorMeterRange: '۲۵ تا ۶۰ متر', nominalTonnage: '۲ تن', minMeters: 25, maxMeters: 60 },
+  { id: 'pickup', name: 'وانت', L: 180, W: 140, H: 100, cap: 800, radiatorMeterRange: '۱ تا ۱۵ متر', nominalTonnage: '۵۰۰ کیلوگرم', minMeters: 1, maxMeters: 15 },
+  { id: 'truck6m', name: 'خاور ۶ تن', L: 600, W: 220, H: 200, cap: 6000, radiatorMeterRange: '۶۰ تا ۱۰۰ متر', nominalTonnage: '۳ تن', minMeters: 60, maxMeters: 100 },
+  { id: 'truck8m', name: 'خاور ۸ تن', L: 800, W: 240, H: 220, cap: 10000, radiatorMeterRange: '۱۰۰ تا ۱۳۵ متر', nominalTonnage: '۴ تن', minMeters: 100, maxMeters: 135 },
+  { id: 'wheel10', name: 'ده چرخ', L: 700, W: 245, H: 220, cap: 15000, radiatorMeterRange: '۲۲۰ تا ۲۶۰ متر', nominalTonnage: '۱۵ تن', minMeters: 220, maxMeters: 260 },
+  { id: 'trailer', name: 'تریلی', L: 1200, W: 250, H: 250, cap: 22000, radiatorMeterRange: '۲۶۰ تا ۵۲۰ متر', nominalTonnage: '۲۲ تن', minMeters: 260, maxMeters: 520 },
+  { id: 'custom', name: 'سفارشی', L: 600, W: 220, H: 200, cap: 6000, radiatorMeterRange: 'دلخواه', nominalTonnage: 'سفارشی' }
+];
+
+export interface CatalogRadiatorSpec {
+  size: number;
+  label: string;
+  width: number; // L in cm
+  length: number; // Thickness in cm
+  height: number; // H in cm
+  weight: number; // W in kg
+  color: string;
+}
+
+export const RADIATOR_CATALOG: CatalogRadiatorSpec[] = [
+  { size: 40, label: 'رادیاتور ۴۰ سانتی (۴۶۰×۱۱۰×۶۲۰)', width: 46, length: 11, height: 62, weight: 10, color: '#ec4899' },
+  { size: 60, label: 'رادیاتور ۶۰ سانتی (۶۶۰×۱۱۰×۶۲۰)', width: 66, length: 11, height: 62, weight: 12, color: '#eab308' },
+  { size: 80, label: 'رادیاتور ۸۰ سانتی (۸۶۰×۱۱۰×۶۲۰)', width: 86, length: 11, height: 62, weight: 15, color: '#ef4444' },
+  { size: 100, label: 'رادیاتور ۱۰۰ سانتی (۱۰۶۰×۱۱۰×۶۲۰)', width: 106, length: 11, height: 62, weight: 20, color: '#3b82f6' },
+  { size: 120, label: 'رادیاتور ۱۲۰ سانتی (۱۲۶۰×۱۱۰×۶۲۰)', width: 126, length: 11, height: 62, weight: 22, color: '#22c55e' },
+  { size: 140, label: 'رادیاتور ۱۴۰ سانتی (۱۴۶۰×۱۱۰×۶۲۰)', width: 146, length: 11, height: 62, weight: 24, color: '#a855f7' },
+  { size: 160, label: 'رادیاتور ۱۶۰ سانتی (۱۶۶۰×۱۱۰×۶۲۰)', width: 166, length: 11, height: 62, weight: 25, color: '#f97316' },
+  { size: 180, label: 'رادیاتور ۱۸۰ سانتی (۱۸۶۰×۱۱۰×۶۲۰)', width: 186, length: 11, height: 62, weight: 28, color: '#64748b' },
+  { size: 200, label: 'رادیاتور ۲۰۰ سانتی (۲۰۶۰×۱۱۰×۶۲۰)', width: 206, length: 11, height: 62, weight: 30, color: '#06b6d4' }
 ];
 
 export const PROFILE_FEATURES: Record<UserProfileKey, FeatureKey[]> = {

@@ -158,9 +158,11 @@ export default function App() {
   // Vehicle
   const [selectedTruckIndex, setSelectedTruckIndex] = useState<number>(0);
   const [truckDetails, setTruckDetails] = useState<TruckDetails>({
+    id: VEHICLE_PRESETS[0].id,
     model: VEHICLE_PRESETS[0].name,
     L: VEHICLE_PRESETS[0].L,
     W: VEHICLE_PRESETS[0].W,
+    H: VEHICLE_PRESETS[0].H,
     cap: VEHICLE_PRESETS[0].cap,
     plate: '',
     driverName: '',
@@ -328,9 +330,11 @@ export default function App() {
     const data = buildRadiatorData(counts, destinationInfo.stops, customWeights);
     const safeMaxH = clamp(rules.maxH, 11, 350);
     const manualTruck = {
+      id: truckDetails.id || VEHICLE_PRESETS[selectedTruckIndex].id,
       name: truckDetails.model || VEHICLE_PRESETS[selectedTruckIndex].name,
       L: truckDetails.L,
       W: truckDetails.W,
+      H: truckDetails.H || VEHICLE_PRESETS[selectedTruckIndex].H,
       cap: truckDetails.cap
     };
     const ev = evaluateTruck(manualTruck, data, safeMaxH, rules.rowW, rules.layerH, rules.axleLimit, rules.overloadMargin, palletConfig, rules.manualLayers);
@@ -429,25 +433,31 @@ export default function App() {
           if (selectedTruckIndex !== rec.bestPresetIndex) {
             setSelectedTruckIndex(rec.bestPresetIndex);
           }
+          const targetId = rec.bestResult.truck.id;
           const targetModel = rec.bestResult.truck.name;
           const targetL = rec.bestResult.truck.L;
           const targetW = rec.bestResult.truck.W;
+          const targetH = rec.bestResult.truck.H;
           const targetCap = rec.bestResult.truck.cap;
 
           setTruckDetails((prev) => {
             if (
+              prev.id === targetId &&
               prev.model === targetModel &&
               prev.L === targetL &&
               prev.W === targetW &&
+              prev.H === targetH &&
               prev.cap === targetCap
             ) {
               return prev;
             }
             return {
               ...prev,
+              id: targetId,
               model: targetModel,
               L: targetL,
               W: targetW,
+              H: targetH,
               cap: targetCap
             };
           });
@@ -459,10 +469,20 @@ export default function App() {
         ? VEHICLE_PRESETS[selectedTruckIndex].name
         : 'خودروی سفارشی';
 
+      const presetId = (selectedTruckIndex >= 0 && VEHICLE_PRESETS[selectedTruckIndex])
+        ? VEHICLE_PRESETS[selectedTruckIndex].id
+        : 'custom';
+
+      const presetH = (selectedTruckIndex >= 0 && VEHICLE_PRESETS[selectedTruckIndex])
+        ? VEHICLE_PRESETS[selectedTruckIndex].H
+        : 200;
+
       const manualTruck = {
+        id: truckDetails.id || presetId,
         name: truckDetails.model || presetName,
         L: truckDetails.L || 600,
         W: truckDetails.W || 220,
+        H: truckDetails.H || presetH,
         cap: truckDetails.cap || 6000
       };
 
@@ -485,9 +505,11 @@ export default function App() {
     setSelectedTruckIndex(index);
     setTruckDetails((prev) => ({
       ...prev,
+      id: preset.id,
       model: preset.name,
       L: preset.L,
       W: preset.W,
+      H: preset.H,
       cap: preset.cap
     }));
   }, []);
@@ -913,6 +935,7 @@ export default function App() {
                 <SmartTruckLoadingPlanner
                   currentCounts={counts}
                   currentTruckDetails={truckDetails}
+                  onUpdateTruckDetails={setTruckDetails}
                   evalResult={result}
                   onApplyCountsToOrder={(newCounts) => setCounts(newCounts)}
                   addToast={addToast}

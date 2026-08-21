@@ -25,7 +25,7 @@ export class MaxRectsPacker {
   private truckH: number;
   private layerHeight: number;
 
-  constructor(truckL: number, truckW: number, truckH: number, layerHeight: number = 55) {
+  constructor(truckL: number, truckW: number, truckH: number, layerHeight: number = 62) {
     this.truckL = truckL;
     this.truckW = truckW;
     this.truckH = truckH;
@@ -95,8 +95,9 @@ export class MaxRectsPacker {
             const shortSideFit = Math.min(leftoverX, leftoverY);
             const longSideFit = Math.max(leftoverX, leftoverY);
 
-            // Prefer normal orientation so thickness aligns across truck width (11 radiators wide)
-            const fitScore = shortSideFit;
+            // Prefer normal orientation, but add penalty if interlocking expects rotated
+            const penalty = (patternMode === 'interlocking' && isInterlockingRotated) ? 100 : 0;
+            const fitScore = shortSideFit + penalty;
 
             if (
               fitScore < bestShortSideFit ||
@@ -106,7 +107,7 @@ export class MaxRectsPacker {
               bestLongSideFit = longSideFit;
               bestLayer = layerIdx;
               bestRectIndex = r;
-              bestRotated = isInterlockingRotated ? true : false;
+              bestRotated = false;
               bestOrientation = isKnifeCandidate ? 'vertical_knife' : 'flat';
             }
           }
@@ -118,8 +119,9 @@ export class MaxRectsPacker {
             const shortSideFit = Math.min(leftoverX, leftoverY);
             const longSideFit = Math.max(leftoverX, leftoverY);
 
-            // Add small penalty to rotation so 11-wide normal orientation is preferred if it fits
-            const fitScore = shortSideFit + (patternMode === 'interlocking' ? 0 : 50);
+            // Prefer rotated for interlocking rotated, otherwise add penalty
+            const penalty = (patternMode === 'interlocking' && !isInterlockingRotated) ? 100 : 50;
+            const fitScore = shortSideFit + penalty;
 
             if (
               fitScore < bestShortSideFit ||
@@ -146,10 +148,6 @@ export class MaxRectsPacker {
         // Brick & Zigzag offset calculation
         let placedX = targetRect.x;
         let placedY = targetRect.y;
-
-        if (patternMode === 'brick_zigzag' && bestLayer % 2 === 1) {
-          placedX = Math.min(this.truckL - placedW, placedX + 15);
-        }
 
         const placedZ = bestLayer * this.layerHeight;
 
@@ -180,7 +178,7 @@ export class MaxRectsPacker {
     }
 
     // Apply Local Space Defragmentation & Compaction
-    const compactedItems = defragmentAndCompact(packedItems, this.truckL, this.truckW);
+    const compactedItems = packedItems;
 
     const packedArea = compactedItems.reduce((acc, i) => acc + ((i.rotated ? i.length : i.width) * (i.rotated ? i.width : i.length)), 0);
     const totalTruckArea = this.truckL * this.truckW * maxLayers;
@@ -316,8 +314,8 @@ export function defragmentAndCompact(
   // Pass 1: Shift items towards front wall (X = 0)
   for (let i = 0; i < result.length; i++) {
     const item = result[i];
-    const itemW = item.rotated ? item.length : item.width;
-    const itemL = item.rotated ? item.width : item.length;
+    const itemW = item.width;
+    const itemL = item.length;
 
     let targetX = 0;
     // Find closest blocking item to the left on same layer
@@ -340,8 +338,8 @@ export function defragmentAndCompact(
   // Pass 2: Align closely spaced items (<3cm gap) side-by-side to eliminate hairline seams
   for (let i = 0; i < result.length; i++) {
     const item = result[i];
-    const itemW = item.rotated ? item.length : item.width;
-    const itemL = item.rotated ? item.width : item.length;
+    const itemW = item.width;
+    const itemL = item.length;
 
     if (item.y < 3) item.y = 0;
     if (truckW - (item.y + itemL) < 3) item.y = truckW - itemL;
@@ -376,7 +374,7 @@ export function runAdvancedOptimizer(
   winningResult: PackingResult;
   metrics: OptimizationMetrics;
 } {
-  const packer = new MaxRectsPacker(truckL, truckW, truckH, 55);
+  const packer = new MaxRectsPacker(truckL, truckW, truckH, 62);
 
   const patterns: { mode: LoadingPatternMode; label: string }[] = [
     { mode: 'hybrid_maxrects', label: 'ترکیبی الگوریتم هوشمند MaxRects Best-Fit' },
@@ -413,8 +411,8 @@ export function runAdvancedOptimizer(
 
     result.packedItems.forEach(i => {
       const w = i.weight;
-      const itemW = i.rotated ? i.length : i.width;
-      const itemL = i.rotated ? i.width : i.length;
+      const itemW = i.width;
+      const itemL = i.length;
       totalWeight += w;
       weightedX += (i.x + itemW / 2) * w;
       weightedY += (i.y + itemL / 2) * w;
@@ -429,7 +427,34 @@ export function runAdvancedOptimizer(
     const yBalanceScore = Math.max(0, 100 - Math.abs(cogYPercent - 50) * 4);
     const weightBalanceScore = Math.round((xBalanceScore * 0.6) + (yBalanceScore * 0.4));
 
-    const totalScore = (packedCount * 1000) + (volumeEfficiency * 20) + (weightBalanceScore * 5);
+    // Calculate 3D Overlaps for this pattern:
+    let overlapCount = 0;
+    const packed = result.packedItems;
+    for (let i = 0; i < packed.length; i++) {
+      const item = packed[i];
+      const itemW = item.width;
+      const itemL = item.length;
+      for (let j = i + 1; j < packed.length; j++) {
+        const other = packed[j];
+        const othW = other.width;
+        const othL = other.length;
+        if (
+          item.x < other.x + othW &&
+          item.x + itemW > other.x &&
+          item.y < other.y + othL &&
+          item.y + itemL > other.y &&
+          item.z < (other.z || 0) + other.height &&
+          (item.z || 0) + item.height > (other.z || 0)
+        ) {
+          overlapCount++;
+        }
+      }
+    }
+
+    // Adjust score with a massive penalty if there are any overlaps, to force choosing a correct pattern
+    const overlapPenalty = overlapCount > 0 ? -10000000 : 0;
+
+    const totalScore = (packedCount * 1000) + (volumeEfficiency * 20) + (weightBalanceScore * 5) + overlapPenalty;
 
     if (totalScore > bestScore || !bestResult) {
       bestScore = totalScore;

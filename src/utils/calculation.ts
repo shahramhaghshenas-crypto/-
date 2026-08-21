@@ -1,9 +1,13 @@
 import { RadiatorCounts, CustomWeights, RadiatorData, VehiclePreset, EvaluationResult, PackedLayer, PackedLane, DestinationStop, PalletConfig, PackedPallet, SizePalletSpec } from '../types';
-import { VEHICLE_PRESETS, DEFAULT_PER_SIZE_PALLET_SPECS } from '../data/presets';
+import { VEHICLE_PRESETS, DEFAULT_PER_SIZE_PALLET_SPECS, RADIATOR_CATALOG } from '../data/presets';
 
 export function pieceWeight(len: number, customWeights?: CustomWeights): number {
   if (customWeights && customWeights[len] !== undefined && customWeights[len] > 0) {
     return customWeights[len];
+  }
+  const spec = RADIATOR_CATALOG.find(c => c.size === len);
+  if (spec) {
+    return spec.weight;
   }
   return 27 * (len / 100);
 }

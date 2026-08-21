@@ -63,34 +63,19 @@ import { Layout3DView } from './Layout3DView';
 import { MaxRectsPacker, FreeRectangle, runAdvancedOptimizer, defragmentAndCompact } from '../utils/maxRectsPacker';
 import { OptimizationMetrics, LoadingPatternMode } from '../types';
 
+import { VEHICLE_PRESETS, RADIATOR_CATALOG, CatalogRadiatorSpec } from '../data/presets';
+
 interface SmartTruckLoadingPlannerProps {
   currentCounts?: RadiatorCounts;
   currentTruckDetails?: TruckDetails;
+  onUpdateTruckDetails?: (details: TruckDetails) => void;
   evalResult?: EvaluationResult | null;
   onApplyCountsToOrder?: (counts: RadiatorCounts) => void;
   addToast?: (type: 'success' | 'warning' | 'error' | 'info', text: string) => void;
 }
 
-// Preset Trucks
-export const SMART_TRUCK_PRESETS: SmartTruckPreset[] = [
-  { id: 'nissan', name: 'نیسان زامیاد (۲ تن)', type: 'nissan', L: 240, W: 160, H: 120, cap: 2000 },
-  { id: 'pickup', name: 'وانت بار (۸۰۰ کیلوگرم)', type: 'pickup', L: 180, W: 140, H: 100, cap: 800 },
-  { id: 'truck6m', name: 'خاور / کامیون ۶ متری', type: 'truck6m', L: 600, W: 220, H: 200, cap: 6000 },
-  { id: 'truck8m', name: 'کامیون ۸ متری تک', type: 'truck8m', L: 800, W: 240, H: 220, cap: 10000 },
-  { id: 'wheel10', name: 'کامیون ده چرخ (۱۵ تن)', type: 'wheel10', L: 700, W: 245, H: 220, cap: 15000 },
-  { id: 'trailer', name: 'تریلی ترانزیت (۱۳.۶ متری)', type: 'trailer', L: 1360, W: 245, H: 250, cap: 24000 }
-];
-
-// Radiator Catalog Spec
-export interface CatalogRadiatorSpec {
-  size: number;
-  label: string;
-  width: number; // L in cm
-  length: number; // Thickness in cm
-  height: number; // H in cm
-  weight: number; // W in kg
-  color: string;
-}
+// Preset Trucks alias
+export const SMART_TRUCK_PRESETS = VEHICLE_PRESETS;
 
 export interface SmartGapSpace {
   id: string;
@@ -111,18 +96,6 @@ export interface SmartGapSpace {
   bestFitModel?: CatalogRadiatorSpec;
 }
 
-export const RADIATOR_CATALOG: CatalogRadiatorSpec[] = [
-  { size: 40, label: 'رادیاتور ۴۰ سانتی (۴۶۰×۱۱۰×۶۲۰)', width: 46, length: 11, height: 62, weight: 9, color: '#ec4899' },   // Pink
-  { size: 60, label: 'رادیاتور ۶۰ سانتی (۶۶۰×۱۱۰×۶۲۰)', width: 66, length: 11, height: 62, weight: 14, color: '#eab308' },  // Yellow
-  { size: 80, label: 'رادیاتور ۸۰ سانتی (۸۶۰×۱۱۰×۶۲۰)', width: 86, length: 11, height: 62, weight: 18, color: '#ef4444' },  // Red
-  { size: 100, label: 'رادیاتور ۱۰۰ سانتی (۱۰۶۰×۱۱۰×۶۲۰)', width: 106, length: 11, height: 62, weight: 22, color: '#3b82f6' }, // Blue
-  { size: 120, label: 'رادیاتور ۱۲۰ سانتی (۱۲۶۰×۱۱۰×۶۲۰)', width: 126, length: 11, height: 62, weight: 26, color: '#22c55e' }, // Green
-  { size: 140, label: 'رادیاتور ۱۴۰ سانتی (۱۴۶۰×۱۱۰×۶۲۰)', width: 146, length: 11, height: 62, weight: 30, color: '#a855f7' }, // Purple
-  { size: 160, label: 'رادیاتور ۱۶۰ سانتی (۱۶۶۰×۱۱۰×۶۲۰)', width: 166, length: 11, height: 62, weight: 35, color: '#f97316' }, // Orange
-  { size: 180, label: 'رادیاتور ۱۸۰ سانتی (۱۸۶۰×۱۱۰×۶۲۰)', width: 186, length: 11, height: 62, weight: 40, color: '#64748b' }, // Slate Gray
-  { size: 200, label: 'رادیاتور ۲۰۰ سانتی (۲۰۶۰×۱۱۰×۶۲۰)', width: 206, length: 11, height: 62, weight: 45, color: '#06b6d4' }  // Cyan
-];
-
 interface AlignmentGuide {
   type: 'x' | 'y';
   pos: number;
@@ -142,16 +115,47 @@ export type SequenceStrategy =
 export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> = ({
   currentCounts,
   currentTruckDetails,
+  onUpdateTruckDetails,
   evalResult,
   onApplyCountsToOrder,
   addToast
 }) => {
-  // Selected Truck Configuration
-  const [selectedTruck, setSelectedTruck] = useState<SmartTruckPreset>(SMART_TRUCK_PRESETS[2]); // Default 6m truck
-  const [customL, setCustomL] = useState<number>(selectedTruck.L);
-  const [customW, setCustomW] = useState<number>(selectedTruck.W);
-  const [customH, setCustomH] = useState<number>(selectedTruck.H);
-  const [customCap, setCustomCap] = useState<number>(selectedTruck.cap);
+  // Selected Truck Configuration derived from parent (Single Source of Truth)
+  const selectedTruck = useMemo(() => {
+    return {
+      id: currentTruckDetails?.id || 'custom',
+      name: currentTruckDetails?.model || 'سفارشی',
+      type: (currentTruckDetails?.id || 'truck6m') as any,
+      L: currentTruckDetails?.L || 600,
+      W: currentTruckDetails?.W || 220,
+      H: currentTruckDetails?.H || 200,
+      cap: currentTruckDetails?.cap || 6000
+    };
+  }, [currentTruckDetails]);
+
+  const customL = selectedTruck.L;
+  const customW = selectedTruck.W;
+  const customH = selectedTruck.H;
+  const customCap = selectedTruck.cap;
+
+  const updateTruckDetailsParent = (updated: Partial<TruckDetails>) => {
+    if (onUpdateTruckDetails && currentTruckDetails) {
+      onUpdateTruckDetails({
+        ...currentTruckDetails,
+        ...updated
+      });
+    }
+  };
+
+  const layoutSignature = useMemo(() => {
+    const countsStr = Object.entries(currentCounts || {})
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([sz, qty]) => `${sz}:${qty}`)
+      .join(',');
+    return `${countsStr}_${selectedTruck.id}_${selectedTruck.L}_${selectedTruck.W}_${selectedTruck.H}_${selectedTruck.cap}`;
+  }, [currentCounts, selectedTruck]);
+
+  const [lastLayoutSignature, setLastLayoutSignature] = useState<string>('');
 
   // View mode tab: '2d' | '3d' | 'sequence'
   const [viewTab, setViewTab] = useState<'2d' | '3d' | 'sequence'>('2d');
@@ -536,8 +540,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     const timeStr = new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
 
     const tableRows = sequenceItems.map((item) => {
-      const w = item.rotated ? item.length : item.width;
-      const l = item.rotated ? item.width : item.length;
+      const w = item.width;
+      const l = item.length;
       const seq = item.sequence || 1;
       const isBlocked = sequenceBlockingWarnings.some(w => w.blockedItemId === item.id);
 
@@ -635,30 +639,12 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     printWindow.document.close();
   };
 
-  // Sync with prop truck if provided
+  // Invalidate old placements and auto-pack on counts or vehicle change (Requirement 6 & 7)
   useEffect(() => {
-    if (currentTruckDetails && currentTruckDetails.L) {
-      const matched = SMART_TRUCK_PRESETS.find(p => p.L === currentTruckDetails.L) || {
-        id: 'custom',
-        name: currentTruckDetails.model || 'خودروی سفارشی',
-        type: 'truck6m' as const,
-        L: currentTruckDetails.L,
-        W: currentTruckDetails.W,
-        H: 200,
-        cap: currentTruckDetails.cap
-      };
-      setSelectedTruck(matched);
-      setCustomL(matched.L);
-      setCustomW(matched.W);
-      setCustomH(matched.H);
-      setCustomCap(matched.cap);
-    }
-  }, [currentTruckDetails]);
+    if (currentCounts && layoutSignature !== lastLayoutSignature) {
+      setLastLayoutSignature(layoutSignature);
 
-  // Load Initial Counts if empty
-  useEffect(() => {
-    if (placedItems.length === 0 && currentCounts) {
-      const initialList: PlacedRadiatorItem[] = [];
+      const newList: PlacedRadiatorItem[] = [];
       let itemCounter = 1;
 
       Object.entries(currentCounts).forEach(([sizeStr, qty]) => {
@@ -668,13 +654,13 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
           label: `رادیاتور ${sizeNum} سانتی`,
           width: sizeNum,
           length: 11,
-          height: 55,
+          height: 62,
           weight: Math.round(sizeNum * 0.22),
           color: '#3b82f6'
         };
 
         for (let i = 0; i < Number(qty); i++) {
-          initialList.push({
+          newList.push({
             id: `rad-${itemCounter++}`,
             model: spec.label,
             width: spec.width,
@@ -690,11 +676,29 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
         }
       });
 
-      if (initialList.length > 0) {
-        autoPackItems(initialList, customL, customW, customH);
+      setSelectedItemIds([]);
+
+      if (newList.length > 0) {
+        const { winningResult, metrics } = runAdvancedOptimizer(
+          newList,
+          selectedTruck.L,
+          selectedTruck.W,
+          selectedTruck.H,
+          selectedTruck.cap
+        );
+        const packedResult = [...winningResult.packedItems, ...winningResult.unpackedItems];
+        setPlacedItems(packedResult);
+        setOptMetrics(metrics);
+        setHistory([packedResult]);
+        setHistoryStep(0);
+      } else {
+        setPlacedItems([]);
+        setOptMetrics(null);
+        setHistory([[]]);
+        setHistoryStep(0);
       }
     }
-  }, [currentCounts]);
+  }, [currentCounts, layoutSignature, lastLayoutSignature, selectedTruck]);
 
   // Load Saved Layouts from localStorage
   useEffect(() => {
@@ -718,16 +722,15 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
   };
 
   // Preset Switch
-  const handleSelectTruckPreset = (preset: SmartTruckPreset) => {
-    setSelectedTruck(preset);
-    setCustomL(preset.L);
-    setCustomW(preset.W);
-    setCustomH(preset.H);
-    setCustomCap(preset.cap);
-
-    if (placedItems.length > 0) {
-      autoPackItems(placedItems, preset.L, preset.W, preset.H);
-    }
+  const handleSelectTruckPreset = (preset: any) => {
+    updateTruckDetailsParent({
+      id: preset.id,
+      model: preset.name,
+      L: preset.L,
+      W: preset.W,
+      H: preset.H,
+      cap: preset.cap
+    });
     if (addToast) addToast('info', `خودرو به ${preset.name} تغییر یافت.`);
   };
 
@@ -877,8 +880,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     const freeNodes: FreeRectangle[] = [{ x: 0, y: 0, width: customL, height: customW }];
 
     layer1Items.forEach((item) => {
-      const itemW = item.rotated ? item.length : item.width;
-      const itemL = item.rotated ? item.width : item.length;
+      const itemW = item.width;
+      const itemL = item.length;
       const placedNode = { x: item.x, y: item.y, width: itemW, height: itemL };
 
       let numRects = freeNodes.length;
@@ -1085,6 +1088,17 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     );
   };
 
+  const checkOverlap3D = (
+    a: { x: number; y: number; z: number; w: number; l: number; h: number },
+    b: { x: number; y: number; z: number; w: number; l: number; h: number }
+  ) => {
+    const epsilon = 0.05;
+    const xOverlap = a.x + epsilon < b.x + b.w && a.x + a.w > b.x + epsilon;
+    const yOverlap = a.y + epsilon < b.y + b.l && a.y + a.l > b.y + epsilon;
+    const zOverlap = a.z + epsilon < b.z + b.h && a.z + a.h > b.z + epsilon;
+    return xOverlap && yOverlap && zOverlap;
+  };
+
   // Dynamic Push & Chain Reaction Engine (Simulates sliding affected nearby items smoothly)
   const applyPushSystem = (
     movingId: string,
@@ -1191,8 +1205,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
     // Snap tiny gaps (<5cm) to adjacent edges or truck walls
     nearby.forEach(item => {
-      const itemW = item.rotated ? item.length : item.width;
-      const itemL = item.rotated ? item.width : item.length;
+      const itemW = item.width;
+      const itemL = item.length;
 
       if (item.x < 5) item.x = 0;
       if (item.y < 5) item.y = 0;
@@ -1232,8 +1246,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
     for (let i = 0; i < placedItems.length; i++) {
       const item = placedItems[i];
-      const itemW = item.rotated ? item.length : item.width;
-      const itemL = item.rotated ? item.width : item.length;
+      const itemW = item.width;
+      const itemL = item.length;
 
       totalWeight += item.weight;
       totalVolumeM3 += (itemW * itemL * item.height) / 1000000;
@@ -1262,8 +1276,15 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
         const other = placedItems[j];
         const othW = other.rotated ? other.length : other.width;
         const othL = other.rotated ? other.width : other.length;
+        const itemH = item.height || 62;
+        const othH = other.height || 62;
 
-        if (checkOverlap({ x: item.x, y: item.y, w: itemW, l: itemL }, { x: other.x, y: other.y, w: othW, l: othL })) {
+        if (
+          checkOverlap3D(
+            { x: item.x, y: item.y, z: item.z || 0, w: itemW, l: itemL, h: itemH },
+            { x: other.x, y: other.y, z: other.z || 0, w: othW, l: othL, h: othH }
+          )
+        ) {
           overlapCount++;
         }
       }
@@ -1447,7 +1468,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
   const handleRotate90Selected = () => {
     if (selectedItemIds.length === 0) return;
     const updated = placedItems.map(item =>
-      selectedItemIds.includes(item.id) ? { ...item, rotated: !item.rotated } : item
+      selectedItemIds.includes(item.id) ? { ...item, rotated: !item.rotated, width: item.length, length: item.width, rotationAngle: !item.rotated ? 90 : 0 } : item
     );
     updateItemsWithHistory(updated);
   };
@@ -1455,7 +1476,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
   const handleRotate180Selected = () => {
     if (selectedItemIds.length === 0) return;
     const updated = placedItems.map(item =>
-      selectedItemIds.includes(item.id) ? { ...item, rotated: !item.rotated } : item
+      selectedItemIds.includes(item.id) ? { ...item, rotated: !item.rotated, width: item.length, length: item.width, rotationAngle: !item.rotated ? 90 : 0 } : item
     );
     updateItemsWithHistory(updated);
     if (addToast) addToast('info', 'چرخش ۱۸۰ درجه اعمال شد.');
@@ -1515,8 +1536,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
     // Find clicked radiator (topmost)
     const found = [...placedItems].reverse().find(item => {
-      const itemW = item.rotated ? item.length : item.width;
-      const itemL = item.rotated ? item.width : item.length;
+      const itemW = item.width;
+      const itemL = item.length;
       return (
         clickX >= item.x &&
         clickX <= item.x + itemW &&
@@ -1720,8 +1741,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     let tempWeightedX = 0;
     let tempWeightedY = 0;
     for (const item of updatedItems) {
-      const w = item.rotated ? item.length : item.width;
-      const l = item.rotated ? item.width : item.length;
+      const w = item.width;
+      const l = item.length;
       tempTotalWeight += item.weight;
       tempWeightedX += item.weight * (item.x + w / 2);
       tempWeightedY += item.weight * (item.y + l / 2);
@@ -1936,8 +1957,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
           let cellWeightSum = 0;
           placedItems.forEach(item => {
-            const itemW = item.rotated ? item.length : item.width;
-            const itemL = item.rotated ? item.width : item.length;
+            const itemW = item.width;
+            const itemL = item.length;
             const overlapW = Math.max(0, Math.min(cellMaxX, item.x + itemW) - Math.max(cellMinX, item.x));
             const overlapH = Math.max(0, Math.min(cellMaxY, item.y + itemL) - Math.max(cellMinY, item.y));
             if (overlapW > 0 && overlapH > 0) {
@@ -1986,8 +2007,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
     // Draw Placed Radiators
     placedItems.forEach((item) => {
-      const itemW = (item.rotated ? item.length : item.width) * scaleX;
-      const itemL = (item.rotated ? item.width : item.length) * scaleY;
+      const itemW = item.width * scaleX;
+      const itemL = item.length * scaleY;
       const posX = item.x * scaleX;
       const posY = item.y * scaleY;
 
@@ -2192,8 +2213,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
           const seq = item.sequence || (idx + 1);
           if (viewTab === 'sequence' && sequenceAnimStep > 0 && seq > sequenceAnimStep) return;
 
-          const itemW = (item.rotated ? item.length : item.width) * scaleX;
-          const itemL = (item.rotated ? item.width : item.length) * scaleY;
+          const itemW = item.width * scaleX;
+          const itemL = item.length * scaleY;
           const targetPxX = (item.x * scaleX) + itemW / 2;
           const targetPxY = (item.y * scaleY) + itemL / 2;
 
@@ -2225,8 +2246,8 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
 
       // 2. Draw Sequence Number Badge Circles on Each Radiator
       placedItems.forEach((item) => {
-        const itemW = (item.rotated ? item.length : item.width) * scaleX;
-        const itemL = (item.rotated ? item.width : item.length) * scaleY;
+        const itemW = item.width * scaleX;
+        const itemL = item.length * scaleY;
         const posX = item.x * scaleX;
         const posY = item.y * scaleY;
         const seq = item.sequence || 1;
@@ -2301,11 +2322,14 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
   };
 
   const handleLoadSavedLayout = (layout: SavedSmartLayout) => {
-    setSelectedTruck(layout.truck);
-    setCustomL(layout.truck.L);
-    setCustomW(layout.truck.W);
-    setCustomH(layout.truck.H);
-    setCustomCap(layout.truck.cap);
+    updateTruckDetailsParent({
+      id: layout.truck.id,
+      model: layout.truck.name,
+      L: layout.truck.L,
+      W: layout.truck.W,
+      H: layout.truck.H,
+      cap: layout.truck.cap
+    });
     updateItemsWithHistory(layout.items);
     setIsSavedModalOpen(false);
     if (addToast) addToast('success', `طرح "${layout.name}" بارگذاری شد.`);
@@ -2323,13 +2347,15 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
     return {
       ok: true,
       truck: {
+        id: selectedTruck.id,
         name: selectedTruck.name,
         L: customL,
         W: customW,
+        H: customH,
         cap: customCap
       },
       lanesCount: calcLanes,
-      maxLayers: Math.max(1, Math.floor(customH / 55)),
+      maxLayers: Math.max(1, Math.floor(customH / 62)),
       usedLayers: Math.max(1, ...placedItems.map(i => i.layer || 1)),
       packed: [
         {
@@ -2515,7 +2541,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
             <input
               type="number"
               value={customL}
-              onChange={(e) => setCustomL(Math.max(100, Number(e.target.value)))}
+              onChange={(e) => updateTruckDetailsParent({ id: 'custom', model: 'سفارشی', L: Math.max(100, Number(e.target.value)) })}
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-mono font-bold"
             />
           </div>
@@ -2524,7 +2550,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
             <input
               type="number"
               value={customW}
-              onChange={(e) => setCustomW(Math.max(100, Number(e.target.value)))}
+              onChange={(e) => updateTruckDetailsParent({ id: 'custom', model: 'سفارشی', W: Math.max(100, Number(e.target.value)) })}
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-mono font-bold"
             />
           </div>
@@ -2533,7 +2559,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
             <input
               type="number"
               value={customH}
-              onChange={(e) => setCustomH(Math.max(50, Number(e.target.value)))}
+              onChange={(e) => updateTruckDetailsParent({ id: 'custom', model: 'سفارشی', H: Math.max(50, Number(e.target.value)) })}
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-mono font-bold"
             />
           </div>
@@ -2542,7 +2568,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
             <input
               type="number"
               value={customCap}
-              onChange={(e) => setCustomCap(Math.max(500, Number(e.target.value)))}
+              onChange={(e) => updateTruckDetailsParent({ id: 'custom', model: 'سفارشی', cap: Math.max(500, Number(e.target.value)) })}
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 font-mono font-bold text-emerald-600 dark:text-emerald-400"
             />
           </div>
@@ -3691,7 +3717,7 @@ export const SmartTruckLoadingPlanner: React.FC<SmartTruckLoadingPlannerProps> =
                             </td>
 
                             <td className="p-2.5 text-center text-slate-300">
-                              {toPersianDigits(item.rotated ? item.length : item.width)} × {toPersianDigits(item.rotated ? item.width : item.length)} × {toPersianDigits(item.height)}
+                              {toPersianDigits(item.width)} × {toPersianDigits(item.length)} × {toPersianDigits(item.height)}
                             </td>
 
                             <td className="p-2.5 text-center text-slate-300">
